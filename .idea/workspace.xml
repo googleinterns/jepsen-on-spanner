@@ -1,0 +1,180 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="ChangeListManager">
+    <list default="true" id="ca57a2f4-4b93-43ef-b60d-1b0f6616a504" name="Default Changelist" comment="" />
+    <option name="EXCLUDED_CONVERTED_TO_IGNORED" value="true" />
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="ExternalProjectsData">
+    <projectState path="$PROJECT_DIR$">
+      <ProjectState />
+    </projectState>
+  </component>
+  <component name="ExternalProjectsManager">
+    <system id="GRADLE">
+      <state>
+        <task path="$PROJECT_DIR$">
+          <activation />
+        </task>
+        <projects_view>
+          <tree_state>
+            <expand />
+            <select />
+          </tree_state>
+        </projects_view>
+      </state>
+    </system>
+  </component>
+  <component name="FileTemplateManagerImpl">
+    <option name="RECENT_TEMPLATES">
+      <list>
+        <option value="Class" />
+        <option value="JUnit5 Test Class" />
+      </list>
+    </option>
+  </component>
+  <component name="G3PluginsProjectSettings">
+    <appliedSettings>
+      <entry key="LinkifyInternalShortlinks" value="true" />
+      <entry key="RecognizedNullableAnnotations" value="true" />
+    </appliedSettings>
+  </component>
+  <component name="ProjectId" id="1cBcFv00JdzYSS0BniiVTDz8dV0" />
+  <component name="PropertiesComponent">
+    <property name="Downloaded.Files.Path.Enabled" value="true" />
+    <property name="Repository.Attach.Annotations" value="false" />
+    <property name="Repository.Attach.JavaDocs" value="false" />
+    <property name="Repository.Attach.Sources" value="false" />
+    <property name="com.intellij.testIntegration.createTest.CreateTestDialog.defaultLibrary" value="JUnit5" />
+    <property name="com.intellij.testIntegration.createTest.CreateTestDialog.defaultLibrarySuperClass.JUnit5" value="" />
+    <property name="project.structure.last.edited" value="Modules" />
+    <property name="project.structure.proportion" value="0.15" />
+    <property name="project.structure.side.proportion" value="0.2" />
+    <property name="settings.editor.selected.configurable" value="reference.settingsdialog.project.gradle" />
+  </component>
+  <component name="RecentsManager">
+    <key name="CreateTestDialog.RecentsKey">
+      <recent name="com.google.jepsenonspanner.loadgenerator" />
+    </key>
+    <key name="CreateTestDialog.Recents.Supers">
+      <recent name="" />
+    </key>
+  </component>
+  <component name="RunDashboard">
+    <option name="ruleStates">
+      <list>
+        <RuleState>
+          <option name="name" value="ConfigurationTypeDashboardGroupingRule" />
+        </RuleState>
+        <RuleState>
+          <option name="name" value="StatusDashboardGroupingRule" />
+        </RuleState>
+      </list>
+    </option>
+  </component>
+  <component name="RunManager" selected="JUnit.BankLoadGeneratorTest">
+    <configuration name="BankLoadGeneratorTest" type="JUnit" factoryName="JUnit" temporary="true" nameIsGenerated="true">
+      <module name="Jepsen-on-spanner.test" />
+      <extension name="coverage">
+        <pattern>
+          <option name="PATTERN" value="com.google.jepsenonspanner.loadgenerator.*" />
+          <option name="ENABLED" value="true" />
+        </pattern>
+      </extension>
+      <option name="PACKAGE_NAME" value="com.google.jepsenonspanner.loadgenerator" />
+      <option name="MAIN_CLASS_NAME" value="com.google.jepsenonspanner.loadgenerator.BankLoadGeneratorTest" />
+      <option name="TEST_OBJECT" value="class" />
+      <method v="2">
+        <option name="Make" enabled="true" />
+      </method>
+    </configuration>
+    <configuration name="OperationTest" type="JUnit" factoryName="JUnit" temporary="true" nameIsGenerated="true">
+      <module name="Jepsen-on-spanner.test" />
+      <extension name="coverage">
+        <pattern>
+          <option name="PATTERN" value="com.google.jepsenonspanner.loadgenerator.*" />
+          <option name="ENABLED" value="true" />
+        </pattern>
+      </extension>
+      <option name="PACKAGE_NAME" value="com.google.jepsenonspanner.loadgenerator" />
+      <option name="MAIN_CLASS_NAME" value="com.google.jepsenonspanner.loadgenerator.OperationTest" />
+      <option name="TEST_OBJECT" value="class" />
+      <method v="2">
+        <option name="Make" enabled="true" />
+      </method>
+    </configuration>
+    <configuration name="OperationTest.decideProceed" type="JUnit" factoryName="JUnit" temporary="true" nameIsGenerated="true">
+      <module name="Jepsen-on-spanner.test" />
+      <extension name="coverage">
+        <pattern>
+          <option name="PATTERN" value="com.google.jepsenonspanner.loadgenerator.*" />
+          <option name="ENABLED" value="true" />
+        </pattern>
+      </extension>
+      <option name="PACKAGE_NAME" value="com.google.jepsenonspanner.loadgenerator" />
+      <option name="MAIN_CLASS_NAME" value="com.google.jepsenonspanner.loadgenerator.OperationTest" />
+      <option name="METHOD_NAME" value="decideProceed" />
+      <option name="TEST_OBJECT" value="method" />
+      <method v="2">
+        <option name="Make" enabled="true" />
+      </method>
+    </configuration>
+    <configuration name="OperationTest.findDependentValue" type="JUnit" factoryName="JUnit" temporary="true" nameIsGenerated="true">
+      <module name="Jepsen-on-spanner.test" />
+      <extension name="coverage">
+        <pattern>
+          <option name="PATTERN" value="com.google.jepsenonspanner.loadgenerator.*" />
+          <option name="ENABLED" value="true" />
+        </pattern>
+      </extension>
+      <option name="PACKAGE_NAME" value="com.google.jepsenonspanner.loadgenerator" />
+      <option name="MAIN_CLASS_NAME" value="com.google.jepsenonspanner.loadgenerator.OperationTest" />
+      <option name="METHOD_NAME" value="findDependentValue" />
+      <option name="TEST_OBJECT" value="method" />
+      <method v="2">
+        <option name="Make" enabled="true" />
+      </method>
+    </configuration>
+    <configuration name="OperationTest.testToString" type="JUnit" factoryName="JUnit" temporary="true" nameIsGenerated="true">
+      <module name="Jepsen-on-spanner.test" />
+      <extension name="coverage">
+        <pattern>
+          <option name="PATTERN" value="com.google.jepsenonspanner.loadgenerator.*" />
+          <option name="ENABLED" value="true" />
+        </pattern>
+      </extension>
+      <option name="PACKAGE_NAME" value="com.google.jepsenonspanner.loadgenerator" />
+      <option name="MAIN_CLASS_NAME" value="com.google.jepsenonspanner.loadgenerator.OperationTest" />
+      <option name="METHOD_NAME" value="testToString" />
+      <option name="TEST_OBJECT" value="method" />
+      <method v="2">
+        <option name="Make" enabled="true" />
+      </method>
+    </configuration>
+    <recent_temporary>
+      <list>
+        <item itemvalue="JUnit.BankLoadGeneratorTest" />
+        <item itemvalue="JUnit.OperationTest" />
+        <item itemvalue="JUnit.OperationTest.findDependentValue" />
+        <item itemvalue="JUnit.OperationTest.testToString" />
+        <item itemvalue="JUnit.OperationTest.decideProceed" />
+      </list>
+    </recent_temporary>
+  </component>
+  <component name="SvnConfiguration">
+    <configuration />
+  </component>
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="ca57a2f4-4b93-43ef-b60d-1b0f6616a504" name="Default Changelist" comment="" />
+      <created>1590005326302</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1590005326302</updated>
+    </task>
+    <servers />
+  </component>
+</project>
