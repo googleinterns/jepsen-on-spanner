@@ -28,7 +28,7 @@ class BankLoadGeneratorTest {
   void testRead(Operation op, int timePast) {
     assertEquals(op.getOp(), Operation.OpType.READ);
     assertEquals(op.getMillisecondsPast(), timePast);
-    assertEquals(op.getValue(), null);
+    assertEquals(op.getValue(), 0);
     int acct = Integer.parseInt(op.getKey());
     assertTrue(acct >= 0 && acct < ACCT_NUM);
   }
@@ -38,7 +38,7 @@ class BankLoadGeneratorTest {
     assertEquals(op.getOp(), Operation.OpType.WRITE);
     int acct = Integer.parseInt(op.getKey());
     assertTrue(acct >= 0 && acct < ACCT_NUM);
-    int transferAmt = Integer.parseInt(op.getValue());
+    int transferAmt = op.getValue();
     assertTrue(transferAmt <= MAX_BALANCE && transferAmt > 0);
   }
 
@@ -47,6 +47,8 @@ class BankLoadGeneratorTest {
     BankLoadGenerator gen = new BankLoadGenerator(OP_LIMIT, MAX_BALANCE, ACCT_NUM);
     while (gen.hasLoad()) {
       List<Operation> ops = gen.nextOperation();
+      assertFalse(ops.isEmpty());
+      // cannot use type info here, because transfer starts with a read as well
       if (ops.get(0).getDependentOp() == null) {
         // a read
         assertEquals(ops.size(), ACCT_NUM);
@@ -66,21 +68,22 @@ class BankLoadGeneratorTest {
 
         // additionally, check functions of each transfer
         Operation subtractOp = ops.get(0).getDependentOp();
-        int transferAmt = Integer.parseInt(subtractOp.getValue());
-        assertTrue(subtractOp.decideProceed(Integer.toString(transferAmt + 1)));
+        int transferAmt = subtractOp.getValue();
+        assertTrue(subtractOp.decideProceed(transferAmt + 1));
         assertTrue(subtractOp.decideProceed(subtractOp.getValue()));
-        assertFalse(subtractOp.decideProceed(Integer.toString(transferAmt - 1)));
-        subtractOp.findDependentValue(Integer.toString(transferAmt + 1));
-        assertEquals(subtractOp.getValue(), "1");
+        assertFalse(subtractOp.decideProceed(transferAmt - 1));
+        subtractOp.findDependentValue(transferAmt + 1);
+        assertEquals(subtractOp.getValue(), 1);
 
         Operation addOp = ops.get(1).getDependentOp();
-        int transferAmt2 = Integer.parseInt(addOp.getValue());
+        int transferAmt2 = addOp.getValue();
         assertEquals(transferAmt, transferAmt2);
         // decide function will always return true, even if invalid; up to client to fail this txn
-        assertTrue(addOp.decideProceed(Integer.toString(transferAmt - 1)));
+        assertTrue(addOp.decideProceed(transferAmt - 1));
         addOp.findDependentValue(addOp.getValue());
-        assertEquals(addOp.getValue(), Integer.toString(transferAmt2 * 2));
+        assertEquals(addOp.getValue(), transferAmt2 * 2);
       }
     }
   }
+
 }
