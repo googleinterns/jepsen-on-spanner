@@ -8,13 +8,14 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 
 class OperationTest {
   private static final String KEY = "KEY";
-  private static final String VALUE = "VALUE";
-  private static final String EMPTY_STRING = "";
+  private static final int VALUE = 1;
+  private static final int ZERO = 0;
 
-  private static final Operation STRONG_READ = new Operation(Operation.OpType.READ, KEY, null);
-  private static final Operation STALE_READ = new Operation(Operation.OpType.READ, KEY, VALUE, 500);
+  private static final Operation STRONG_READ = new Operation(Operation.OpType.READ, KEY, 0);
+  private static final Operation STALE_READ = new Operation(Operation.OpType.READ, KEY, VALUE,
+          500, false);
   private static final Operation DEPENDENT_WRITE = new Operation(Operation.OpType.WRITE, KEY,
-          VALUE, (s1, s2) -> s1 + " " + s2, (s1, s2) -> !s1.isEmpty() && !s2.isEmpty());
+          VALUE, (s1, s2) -> s1 + s2, (s1, s2) -> s1 > 0 && s2 > 0);
 
   @Test
   void testToString() {
@@ -32,13 +33,13 @@ class OperationTest {
   @Test
   void decideProceed() {
     assertTrue(DEPENDENT_WRITE.decideProceed(VALUE));
-    assertFalse(DEPENDENT_WRITE.decideProceed(EMPTY_STRING));
+    assertFalse(DEPENDENT_WRITE.decideProceed(ZERO));
   }
 
   @Test
   void findDependentValue() {
     DEPENDENT_WRITE.findDependentValue(VALUE);
-    assertEquals(DEPENDENT_WRITE.getValue(), VALUE + " " + VALUE);
+    assertEquals(DEPENDENT_WRITE.getValue(), VALUE + VALUE);
   }
 
   @Test
@@ -47,4 +48,5 @@ class OperationTest {
     assertEquals(DEPENDENT_WRITE.toString(), STRONG_READ.getDependentOp().toString());
     STRONG_READ.setDependentOp(null);
   }
+
 }

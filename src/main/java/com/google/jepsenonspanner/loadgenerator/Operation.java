@@ -26,7 +26,8 @@ public class Operation {
 
   private OpType op;
   private String key;
-  private String value;
+  private int value;
+  private boolean bounded;
 
   // nonzero value means stale read
   private int millisecondsPast;
@@ -36,62 +37,63 @@ public class Operation {
 
   // not null if this is a dependent operation; a function that returns the value that depends on
   // a previous operation (usually a read)
-  private BinaryOperator<String> findDependValFunc;
+  private BinaryOperator<Integer> findDependValFunc;
 
   // not null if this is a dependent operation; a function that decides whether current operation
   // should proceed, depending on the return value of the previous operation (usually a read)
-  private BiPredicate<String, String> decideProceedFunc;
+  private BiPredicate<Integer, Integer> decideProceedFunc;
 
   /**
    * Base constructor
    *
-   * @param op_ the operation type
-   * @param key_ key to operate on
-   * @param value_ value to execute (null for read)
-   * @param millisecondPast_ how many milliseconds in the past to read
-   * @param dependent_ operation that depends on this instance
-   * @param findDependValFunc_ function that returns the value that depends on a previous operation
-   * @param decideProceedFunc_ function that decides whether current operation should proceed
+   * @param op the operation type
+   * @param key key to operate on
+   * @param value value to execute (null for read)
+   * @param millisecondPast how many milliseconds in the past to read
+   * @param dependent operation that depends on this instance
+   * @param findDependValFunc function that returns the value that depends on a previous operation
+   * @param decideProceedFunc function that decides whether current operation should proceed
    */
-  public Operation(OpType op_, String key_, String value_, int millisecondPast_,
-                   Operation dependent_, BinaryOperator<String> findDependValFunc_,
-                   BiPredicate<String, String> decideProceedFunc_) {
-    op = op_;
-    key = key_;
-    value = value_;
-    millisecondsPast = millisecondPast_;
-    dependent = dependent_;
-    findDependValFunc = findDependValFunc_;
-    decideProceedFunc = decideProceedFunc_;
+  public Operation(OpType op, String key, int value, int millisecondPast, Operation dependent,
+                   BinaryOperator<Integer> findDependValFunc,
+                   BiPredicate<Integer, Integer> decideProceedFunc, boolean bounded) {
+    this.op = op;
+    this.key = key;
+    this.value = value;
+    this.millisecondsPast = millisecondPast;
+    this.dependent = dependent;
+    this.findDependValFunc = findDependValFunc;
+    this.decideProceedFunc = decideProceedFunc;
+    this.bounded = bounded;
   }
 
   /**
    * Constructor for a non-dependent stale read
    * 
-   * @see Operation#Operation(OpType, String, String, int, Operation, BinaryOperator, BiPredicate)
+   * @see Operation#Operation(OpType, String, int, int, Operation, BinaryOperator, BiPredicate, boolean)
    */
-  public Operation(OpType op_, String key_, String value_, int millisecondsPast_) {
-    this(op_, key_, value_, millisecondsPast_, null, null, null);
+  public Operation(OpType op, String key, int value, int millisecondsPast, boolean bounded) {
+    this(op, key, value, millisecondsPast, null, null, null, bounded);
   }
 
   /**
    * Constructor for a dependent transactional operation
    *
-   * @see Operation#Operation(OpType, String, String, int, Operation, BinaryOperator, BiPredicate)
+   * @see Operation#Operation(OpType, String, int, int, Operation, BinaryOperator, BiPredicate, boolean)
    */
-  public Operation(OpType op_, String key_, String value_,
-                   BinaryOperator<String> findDependValFunc_,
-                   BiPredicate<String, String> decideProceedFunc_) {
-    this(op_, key_, value_, 0, null, findDependValFunc_, decideProceedFunc_);
+  public Operation(OpType op, String key, int value,
+                   BinaryOperator<Integer> findDependValFunc,
+                   BiPredicate<Integer, Integer> decideProceedFunc) {
+    this(op, key, value, 0, null, findDependValFunc, decideProceedFunc, false);
   }
 
   /**
    * Constructor for a non-dependent transactional operation
    *
-   * @see Operation#Operation(OpType, String, String, int, Operation, BinaryOperator, BiPredicate)
+   * @see Operation#Operation(OpType, String, int, int, Operation, BinaryOperator, BiPredicate, boolean)
    */
-  public Operation(OpType op_, String key_, String value_) {
-    this(op_, key_, value_, 0, null, null, null);
+  public Operation(OpType op, String key, int value) {
+    this(op, key, value, 0, null, null, null, false);
   }
 
   public OpType getOp() {
@@ -110,11 +112,11 @@ public class Operation {
     this.key = key;
   }
 
-  public String getValue() {
+  public int getValue() {
     return value;
   }
 
-  public void setValue(String value) {
+  public void setValue(int value) {
     this.value = value;
   }
 
@@ -131,7 +133,7 @@ public class Operation {
    *
    * @param dependOn return value of the operation this depends on
    */
-  public boolean decideProceed(String dependOn) {
+  public boolean decideProceed(int dependOn) {
     return decideProceedFunc.test(dependOn, value);
   }
 
@@ -140,17 +142,17 @@ public class Operation {
    *
    * @param dependOn return value of the operation this depends on
    */
-  public void findDependentValue(String dependOn) {
+  public void findDependentValue(int dependOn) {
     value = findDependValFunc.apply(dependOn, value);
   }
 
   /**
    * Sets the dependent that relies on this operation
    *
-   * @param dependent_ the dependent operation
+   * @param dependent the dependent operation
    */
-  public void setDependentOp(Operation dependent_) {
-    dependent = dependent_;
+  public void setDependentOp(Operation dependent) {
+    this.dependent = dependent;
   }
 
   /**
@@ -165,7 +167,7 @@ public class Operation {
    */
   @Override
   public String toString() {
-    return String.join(" ", Arrays.asList(op.name(), key, value,
+    return String.join(" ", Arrays.asList(op.name(), key, Integer.toString(value),
             Integer.toString(millisecondsPast), "[", String.valueOf(dependent), "]"));
   }
 }
