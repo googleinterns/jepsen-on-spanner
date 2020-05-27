@@ -9,11 +9,16 @@ import com.google.cloud.spanner.Spanner;
 import com.google.cloud.spanner.SpannerException;
 import com.google.cloud.spanner.SpannerExceptionFactory;
 import com.google.cloud.spanner.SpannerOptions;
+import com.google.cloud.spanner.TransactionContext;
+import com.google.cloud.spanner.TransactionRunner;
+import com.google.cloud.spanner.Type;
 import com.google.jepsenonspanner.loadgenerator.Operation;
 import com.google.spanner.admin.database.v1.CreateDatabaseMetadata;
 import com.google.spanner.admin.database.v1.UpdateDatabaseDdlMetadata;
 
+import javax.annotation.Nullable;
 import java.util.Arrays;
+import java.util.List;
 import java.util.concurrent.ExecutionException;
 
 public class SpannerClient {
@@ -21,6 +26,12 @@ public class SpannerClient {
   private DatabaseClient client;
   private DatabaseAdminClient adminClient;
   private DatabaseId databaseId;
+
+  private static final Type Record = Type.struct(Arrays.asList(
+          Type.StructField.of("OpType", Type.bool()),
+          Type.StructField.of("Key", Type.string()),
+          Type.StructField.of("Value", Type.string())
+  ));
 
   public SpannerClient(String instanceId, String dbId) {
     SpannerOptions options = SpannerOptions.newBuilder().build();
@@ -48,6 +59,7 @@ public class SpannerClient {
       Database db = op.get();
     } catch (ExecutionException e) {
       // If the operation failed during execution, expose the cause.
+      // TODO: find a way to identify repeated create table and ignore that error
       throw (SpannerException) e.getCause();
     } catch (InterruptedException e) {
       // Throw when a thread is waiting, sleeping, or otherwise occupied,
@@ -56,7 +68,23 @@ public class SpannerClient {
     }
   }
 
-  public void executeOp(Operation op) {
-    
+  public void executeOp(List<Operation> ops) {
+    assert !ops.isEmpty();
+    Operation firstOp = ops.get(0);
+    if (firstOp.getOp() == Operation.OpType.READ && firstOp.getMillisecondsPast() != 0) {
+      // TODO: stale read
+    } else {
+      // if one is stale read, whole list should be stale reads
+      //
+      client.readWriteTransaction().run(
+        new TransactionRunner.TransactionCallable<Void>() {
+          @Nullable
+          @Override
+          public Void run(TransactionContext transaction) throws Exception {
+            return null;
+          }
+        }
+      )
+    }
   }
 }
