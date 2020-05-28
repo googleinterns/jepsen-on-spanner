@@ -1,5 +1,9 @@
 package com.google.jepsenonspanner.loadgenerator;
 
+import com.google.jepsenonspanner.operation.Operation;
+import com.google.jepsenonspanner.operation.StaleOperation;
+import com.google.jepsenonspanner.operation.TransactionalOperation;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
@@ -8,7 +12,7 @@ import java.util.Random;
  * Implements the bank benchmark load generator. Generates two kinds of load: a read across all
  * accounts and a transfer between two accounts.
  */
-public class BankLoadGenerator implements LoadGenerator {
+public class BankLoadGenerator extends LoadGenerator {
 
   /**
    * Configuration class to adjust distribution of randomly generated loads
@@ -50,7 +54,6 @@ public class BankLoadGenerator implements LoadGenerator {
     }
   }
 
-  private int opLimit = 20;
   private int maxBalance;
   private int acctNumber;
   private Random rand;
@@ -69,10 +72,10 @@ public class BankLoadGenerator implements LoadGenerator {
    */
   public BankLoadGenerator(int opLimit, int maxBalance, int acctNumber, Config config,
                            int seed) {
+    super(opLimit);
     if (config == null) {
       throw new RuntimeException("Invalid configuration");
     }
-    this.opLimit = opLimit;
     this.maxBalance = maxBalance;
     this.acctNumber = acctNumber;
     this.rand = new Random(seed);
@@ -89,7 +92,7 @@ public class BankLoadGenerator implements LoadGenerator {
   }
 
   /**
-   * Constructor with a default distribution of 1:1:1:1
+   * Constructor with a default distribution of 2:1:1:2
    *
    * @see BankLoadGenerator#BankLoadGenerator(int, int, int, Config)
    */
@@ -98,12 +101,7 @@ public class BankLoadGenerator implements LoadGenerator {
   }
 
   @Override
-  public boolean hasLoad() {
-    return opLimit > 0;
-  }
-
-  @Override
-  public List<Operation> nextOperation() {
+  public List<? extends Operation> nextOperation() {
     // check if reached limit
     if (opLimit <= 0) {
       throw new RuntimeException("Bank generator has reached limit");
@@ -123,43 +121,44 @@ public class BankLoadGenerator implements LoadGenerator {
     }
   }
 
-  private List<Operation> strongRead() {
-    List<Operation> transaction = new ArrayList<>();
+  private List<TransactionalOperation> strongRead() {
+    List<TransactionalOperation> transaction = new ArrayList<>();
     for (int i = 0; i < acctNumber; i++) {
-      transaction.add(new Operation(Operation.OpType.READ, Integer.toString(i), 0));
+      transaction.add(new TransactionalOperation(Integer.toString(i), 0, TransactionalOperation.READ));
     }
     return transaction;
   }
 
-  private List<Operation> staleRead(boolean bounded) {
+  private List<StaleOperation> staleRead(boolean bounded) {
     int millisecondsPast = rand.nextInt(MAX_MILLISECOND_PAST) + 1; // prevent 0 ms in the past
-    List<Operation> transaction = new ArrayList<>();
+    List<StaleOperation> transaction = new ArrayList<>();
     for (int i = 0; i < acctNumber; i++) {
-      transaction.add(new Operation(Operation.OpType.READ, Integer.toString(i), 0,
-              millisecondsPast, bounded));
+      transaction.add(new StaleOperation(Integer.toString(i), 0, bounded, millisecondsPast));
     }
     return transaction;
   }
 
-  private List<Operation> transfer() {
-    List<Operation> transaction = new ArrayList<>();
+  private List<TransactionalOperation> transfer() {
+    List<TransactionalOperation> transaction = new ArrayList<>();
 
     // transfer from account 1 to account 2
     int[] accounts = rand.ints(0, acctNumber).distinct().limit(2).toArray();
     int acct1 = accounts[0];
     int acct2 = accounts[1];
-    transaction.add(new Operation(Operation.OpType.READ, Integer.toString(acct1), 0));
-    transaction.add(new Operation(Operation.OpType.READ, Integer.toString(acct2), 0));
+    transaction.add(new TransactionalOperation(Integer.toString(acct1), 0,
+            TransactionalOperation.READ));
+    transaction.add(new TransactionalOperation(Integer.toString(acct2), 0,
+            TransactionalOperation.READ));
 
     // add the dependent write operations
     int transferAmount = rand.nextInt(this.maxBalance) + 1;
-    Operation acct1Write = new Operation(Operation.OpType.WRITE, Integer.toString(acct1),
-            transferAmount,
+    TransactionalOperation acct1Write = new TransactionalOperation(Integer.toString(acct1),
+            transferAmount, TransactionalOperation.WRITE,
             (balance, transfer) -> balance - transfer,
             (balance, transfer) -> balance >= transfer);
     transaction.get(0).setDependentOp(acct1Write);
-    Operation acct2Write = new Operation(Operation.OpType.WRITE, Integer.toString(acct2),
-            transferAmount,
+    TransactionalOperation acct2Write = new TransactionalOperation(Integer.toString(acct2),
+            transferAmount, TransactionalOperation.WRITE,
             (balance, transfer) -> balance + transfer,
             (balance, transfer) -> true);
     transaction.get(1).setDependentOp(acct2Write);
