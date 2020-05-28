@@ -13,7 +13,7 @@ class BankLoadGeneratorTest {
   private static final int OP_LIMIT = 20;
   private static final int MAX_BALANCE = 10;
   private static final int ACCT_NUM = 3;
-  private static final int MAX_TIME_PAST = 3000000;
+  private static final int MAX_TIME_PAST = 5 * 60 * 1000;
 
   @Test
   void hasLoad() {
@@ -23,23 +23,6 @@ class BankLoadGeneratorTest {
       gen.nextOperation();
     }
     assertFalse(gen.hasLoad());
-  }
-
-  void testRead(Operation op, int timePast) {
-    assertEquals(op.getOp(), Operation.OpType.READ);
-    assertEquals(op.getMillisecondsPast(), timePast);
-    assertEquals(op.getValue(), 0);
-    int acct = Integer.parseInt(op.getKey());
-    assertTrue(acct >= 0 && acct < ACCT_NUM);
-  }
-
-  void testTransfer(Operation op) {
-    assertTrue(op != null);
-    assertEquals(op.getOp(), Operation.OpType.WRITE);
-    int acct = Integer.parseInt(op.getKey());
-    assertTrue(acct >= 0 && acct < ACCT_NUM);
-    int transferAmt = op.getValue();
-    assertTrue(transferAmt <= MAX_BALANCE && transferAmt > 0);
   }
 
   @Test
@@ -54,16 +37,16 @@ class BankLoadGeneratorTest {
         assertEquals(ops.size(), ACCT_NUM);
         int timePast = ops.get(0).getMillisecondsPast();
         for (Operation op : ops) {
-          testRead(op, timePast);
+          checkRead(op, timePast);
         }
       } else {
         // transfer between 2 accounts
         assertEquals(ops.size(), 2);
         for (Operation op : ops) {
-          testRead(op, 0);
+          checkRead(op, 0);
 
           // now check the dependent transfer ops
-          testTransfer(op.getDependentOp());
+          checkTransfer(op.getDependentOp());
         }
 
         // additionally, check functions of each transfer
@@ -84,6 +67,23 @@ class BankLoadGeneratorTest {
         assertEquals(addOp.getValue(), transferAmt2 * 2);
       }
     }
+  }
+
+  void checkRead(Operation op, int timePast) {
+    assertEquals(op.getOp(), Operation.OpType.READ);
+    assertEquals(op.getMillisecondsPast(), timePast);
+    assertEquals(op.getValue(), 0);
+    int acct = Integer.parseInt(op.getKey());
+    assertTrue(acct >= 0 && acct < ACCT_NUM);
+  }
+
+  void checkTransfer(Operation op) {
+    assertTrue(op != null);
+    assertEquals(op.getOp(), Operation.OpType.WRITE);
+    int acct = Integer.parseInt(op.getKey());
+    assertTrue(acct >= 0 && acct < ACCT_NUM);
+    int transferAmt = op.getValue();
+    assertTrue(transferAmt <= MAX_BALANCE && transferAmt > 0);
   }
 
 }
