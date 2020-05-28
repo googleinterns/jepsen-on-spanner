@@ -23,6 +23,13 @@ public class BankLoadGenerator extends LoadGenerator {
     private int exactStaleRead;
     private int transfer;
 
+    public enum LoadType {
+      STRONG_READ,
+      BOUNDED_STALE_READ,
+      EXACT_STALE_READ,
+      TRANSFER
+    }
+
     public Config(int strongRead, int boundedStaleRead, int exactStaleRead, int transfer) {
       this.strongRead = strongRead;
       this.boundedStaleRead = boundedStaleRead;
@@ -35,22 +42,22 @@ public class BankLoadGenerator extends LoadGenerator {
      * 0 - strong read, 1 - bounded stale read, 2 - exact stale read, 3 - transfer
      * @param randNum random number given by generator
      */
-    public int categorize(int randNum) {
+    public LoadType categorize(int randNum) {
       int distributionSum = strongRead + boundedStaleRead + exactStaleRead + transfer;
       randNum %= distributionSum;
       distributionSum -= transfer;
       if (randNum >= distributionSum) {
-        return 3;
+        return LoadType.TRANSFER;
       }
       distributionSum -= exactStaleRead;
       if (randNum >= distributionSum) {
-        return 2;
+        return LoadType.EXACT_STALE_READ;
       }
       distributionSum -= boundedStaleRead;
       if (randNum >= distributionSum) {
-        return 1;
+        return LoadType.BOUNDED_STALE_READ;
       }
-      return 0;
+      return LoadType.STRONG_READ;
     }
   }
 
@@ -97,7 +104,8 @@ public class BankLoadGenerator extends LoadGenerator {
    * @see BankLoadGenerator#BankLoadGenerator(int, int, int, Config)
    */
   public BankLoadGenerator(int opLimit, int maxBalance, int acctNumber) {
-    this(opLimit, maxBalance, acctNumber, /*config=*/new Config(2, 1, 1, 2));
+    this(opLimit, maxBalance, acctNumber, /*config=*/new Config(/*strongRead=*/2, /*boundedStaleRead
+    =*/1, /*exactStaleRead=*/1, /*transfer=*/2));
   }
 
   @Override
@@ -110,11 +118,11 @@ public class BankLoadGenerator extends LoadGenerator {
     opLimit--;
     int nextOp = rand.nextInt();
     switch (config.categorize(nextOp)) {
-      case 0:
+      case STRONG_READ:
         return strongRead();
-      case 1:
+      case BOUNDED_STALE_READ:
         return staleRead(/*bounded=*/true);
-      case 2:
+      case EXACT_STALE_READ:
         return staleRead(/*bounded=*/false);
       default:
         return transfer();
