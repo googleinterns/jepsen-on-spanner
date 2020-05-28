@@ -8,6 +8,14 @@ import java.util.List;
  *
  */
 public interface LoadGenerator {
+
+  /**
+   * Returns the next operations for the client wrapper to execute
+   */
   public List<Operation> nextOperation();
+
+  /**
+   * Returns if the generator has more loads
+   */
   public boolean hasLoad();
 }

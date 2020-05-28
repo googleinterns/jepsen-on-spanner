@@ -138,7 +138,7 @@ public class Operation {
   }
 
   /**
-   * Fill in the value depending on return value of the previous operation
+   * Fills in the value depending on return value of the previous operation
    *
    * @param dependOn return value of the operation this depends on
    */

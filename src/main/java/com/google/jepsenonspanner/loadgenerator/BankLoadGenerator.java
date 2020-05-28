@@ -1,6 +1,5 @@
 package com.google.jepsenonspanner.loadgenerator;
 
-import javax.print.DocFlavor;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
@@ -11,65 +10,98 @@ import java.util.Random;
  */
 public class BankLoadGenerator implements LoadGenerator {
 
+  /**
+   * Configuration class to adjust distribution of randomly generated loads
+   */
+  public static class Config {
+    private int strongRead;
+    private int boundedStaleRead;
+    private int exactStaleRead;
+    private int transfer;
+
+    public Config(int strongRead, int boundedStaleRead, int exactStaleRead, int transfer) {
+      this.strongRead = strongRead;
+      this.boundedStaleRead = boundedStaleRead;
+      this.exactStaleRead = exactStaleRead;
+      this.transfer = transfer;
+    }
+
+    /**
+     * Given a random number by the load generator, return which load to issue
+     * 0 - strong read, 1 - bounded stale read, 2 - exact stale read, 3 - transfer
+     * @param randNum random number given by generator
+     */
+    public int categorize(int randNum) {
+      int distributionSum = strongRead + boundedStaleRead + exactStaleRead + transfer;
+      randNum %= distributionSum;
+      distributionSum -= transfer;
+      if (randNum >= distributionSum) {
+        return 3;
+      }
+      distributionSum -= exactStaleRead;
+      if (randNum >= distributionSum) {
+        return 2;
+      }
+      distributionSum -= boundedStaleRead;
+      if (randNum >= distributionSum) {
+        return 1;
+      }
+      return 0;
+    }
+  }
+
   private int opLimit = 20;
   private int maxBalance;
   private int acctNumber;
   private Random rand;
   private int randSeed;
-  private int[] distribution;
+  private Config config;
 
-  private static final int MAX_MILLISECOND_PAST = 3000000; // 5 minutes
+  private static final int MAX_MILLISECOND_PAST = 5 * 60 * 1000; // 5 minutes
 
   /**
    * Constructor for the bank load generator specifying seed
-   *
-   * @param opLimit number of operations to issue on this worker
+   *  @param opLimit number of operations to issue on this worker
    * @param maxBalance the maximum balance on each account
    * @param acctNumber number of accounts
-   * @param distribution ratio of strong read : bounded stale read : exact stale read : write
+   * @param config ratio of strong read : bounded stale read : exact stale read : write
    * @param seed random seed
    */
-  public BankLoadGenerator(int opLimit, int maxBalance, int acctNumber, int[] distribution,
+  public BankLoadGenerator(int opLimit, int maxBalance, int acctNumber, Config config,
                            int seed) {
-    if (distribution == null || distribution.length != 4) {
-      throw new RuntimeException("Invalid distribution");
+    if (config == null) {
+      throw new RuntimeException("Invalid configuration");
     }
     this.opLimit = opLimit;
     this.maxBalance = maxBalance;
     this.acctNumber = acctNumber;
     this.rand = new Random(seed);
-    this.distribution = distribution;
+    this.config = config;
   }
 
   /**
    * Constructor with a random seed
    *
-   * @see BankLoadGenerator#BankLoadGenerator(int, int, int, int[], int)
+   * @see BankLoadGenerator#BankLoadGenerator(int, int, int, Config, int)
    */
-  public BankLoadGenerator(int opLimit, int maxBalance, int acctNumber, int[] distribution) {
-    this(opLimit, maxBalance, acctNumber, distribution, /*seed=*/new Random().nextInt());
+  public BankLoadGenerator(int opLimit, int maxBalance, int acctNumber, Config config) {
+    this(opLimit, maxBalance, acctNumber, config, /*seed=*/new Random().nextInt());
   }
 
   /**
    * Constructor with a default distribution of 1:1:1:1
    *
-   * @see BankLoadGenerator#BankLoadGenerator(int, int, int, int[])
+   * @see BankLoadGenerator#BankLoadGenerator(int, int, int, Config)
    */
   public BankLoadGenerator(int opLimit, int maxBalance, int acctNumber) {
-    this(opLimit, maxBalance, acctNumber, /*distribution=*/new int[] {1, 1, 1, 1});
+    this(opLimit, maxBalance, acctNumber, /*config=*/new Config(2, 1, 1, 2));
   }
 
-  /**
-   * Returns if the generator has more loads
-   */
   @Override
   public boolean hasLoad() {
     return opLimit > 0;
   }
 
-  /**
-   * Returns the next operations for the client wrapper to execute
-   */
   @Override
   public List<Operation> nextOperation() {
     // check if reached limit
@@ -78,21 +110,17 @@ public class BankLoadGenerator implements LoadGenerator {
     }
 
     opLimit--;
-    int distributionSum = distribution[0] + distribution[1] + distribution[2] + distribution[3];
-    int nextOp = rand.nextInt() % distributionSum;
-    distributionSum -= distribution[3];
-    if (nextOp >= distributionSum) {
-      return transfer();
+    int nextOp = rand.nextInt();
+    switch (config.categorize(nextOp)) {
+      case 0:
+        return strongRead();
+      case 1:
+        return staleRead(/*bounded=*/true);
+      case 2:
+        return staleRead(/*bounded=*/false);
+      default:
+        return transfer();
     }
-    distributionSum -= distribution[2];
-    if (nextOp >= distributionSum) {
-      return staleRead(/*bounded=*/false);
-    }
-    distributionSum -= distribution[1];
-    if (nextOp >= distributionSum) {
-      return staleRead(/*bounded=*/true);
-    }
-    return strongRead();
   }
 
   private List<Operation> strongRead() {
@@ -117,9 +145,9 @@ public class BankLoadGenerator implements LoadGenerator {
     List<Operation> transaction = new ArrayList<>();
 
     // transfer from account 1 to account 2
-    int acct1 = rand.nextInt(acctNumber);
-    int acct2 = -1;
-    do acct2 = rand.nextInt(acctNumber); while (acct2 != acct1);
+    int[] accounts = rand.ints(0, acctNumber).distinct().limit(2).toArray();
+    int acct1 = accounts[0];
+    int acct2 = accounts[1];
     transaction.add(new Operation(Operation.OpType.READ, Integer.toString(acct1), 0));
     transaction.add(new Operation(Operation.OpType.READ, Integer.toString(acct2), 0));
 
