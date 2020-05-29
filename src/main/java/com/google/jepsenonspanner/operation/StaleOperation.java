@@ -11,6 +11,17 @@ public class StaleOperation extends Operation {
     this.staleness = staleness;
   }
 
+
+  /**
+   * Default constructor for a stale read
+   * @param key
+   * @param bounded
+   * @param staleness
+   */
+  public StaleOperation(String key, boolean bounded, int staleness) {
+    this(key, /*value=*/0, bounded, staleness);
+  }
+
   public boolean isBounded() {
     return bounded;
   }

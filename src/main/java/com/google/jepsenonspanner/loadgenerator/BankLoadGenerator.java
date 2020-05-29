@@ -78,7 +78,7 @@ public class BankLoadGenerator extends LoadGenerator {
    * @param seed random seed
    */
   public BankLoadGenerator(int opLimit, int maxBalance, int acctNumber, Config config,
-                           int seed) {
+                           int seed) throws RuntimeException {
     super(opLimit);
     if (config == null) {
       throw new RuntimeException("Invalid configuration");
@@ -132,18 +132,19 @@ public class BankLoadGenerator extends LoadGenerator {
   private List<TransactionalOperation> strongRead() {
     List<TransactionalOperation> transaction = new ArrayList<>();
     for (int i = 0; i < acctNumber; i++) {
-      transaction.add(new TransactionalOperation(Integer.toString(i), 0, TransactionalOperation.READ));
+      transaction.add(new TransactionalOperation(Integer.toString(i), 0,
+              TransactionalOperation.Type.READ));
     }
     return transaction;
   }
 
   private List<StaleOperation> staleRead(boolean bounded) {
     int millisecondsPast = rand.nextInt(MAX_MILLISECOND_PAST) + 1; // prevent 0 ms in the past
-    List<StaleOperation> transaction = new ArrayList<>();
+    List<StaleOperation> staleOperations = new ArrayList<>();
     for (int i = 0; i < acctNumber; i++) {
-      transaction.add(new StaleOperation(Integer.toString(i), 0, bounded, millisecondsPast));
+      staleOperations.add(new StaleOperation(Integer.toString(i), 0, bounded, millisecondsPast));
     }
-    return transaction;
+    return staleOperations;
   }
 
   private List<TransactionalOperation> transfer() {
@@ -154,19 +155,19 @@ public class BankLoadGenerator extends LoadGenerator {
     int acct1 = accounts[0];
     int acct2 = accounts[1];
     transaction.add(new TransactionalOperation(Integer.toString(acct1), 0,
-            TransactionalOperation.READ));
+            TransactionalOperation.Type.READ));
     transaction.add(new TransactionalOperation(Integer.toString(acct2), 0,
-            TransactionalOperation.READ));
+            TransactionalOperation.Type.READ));
 
     // add the dependent write operations
     int transferAmount = rand.nextInt(this.maxBalance) + 1;
     TransactionalOperation acct1Write = new TransactionalOperation(Integer.toString(acct1),
-            transferAmount, TransactionalOperation.WRITE,
+            transferAmount, TransactionalOperation.Type.WRITE,
             (balance, transfer) -> balance - transfer,
             (balance, transfer) -> balance >= transfer);
     transaction.get(0).setDependentOp(acct1Write);
     TransactionalOperation acct2Write = new TransactionalOperation(Integer.toString(acct2),
-            transferAmount, TransactionalOperation.WRITE,
+            transferAmount, TransactionalOperation.Type.WRITE,
             (balance, transfer) -> balance + transfer,
             (balance, transfer) -> true);
     transaction.get(1).setDependentOp(acct2Write);
