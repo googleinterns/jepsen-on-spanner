@@ -2,20 +2,20 @@ package com.google.jepsenonspanner.operation;
 
 public class StaleOperation extends Operation {
 
-//  private boolean bounded;
-//  private int staleness; // in milliseconds
-//
+  private boolean bounded;
+  private int staleness; // in milliseconds
+
   public StaleOperation(String key, long value) {
     super(key, value);
   }
-//
-//  public boolean isBounded() {
-//    return bounded;
-//  }
-//
-//  public int getStaleness() {
-//    return staleness;
-//  }
+
+  public boolean isBounded() {
+    return bounded;
+  }
+
+  public int getStaleness() {
+    return staleness;
+  }
 
   @Override
   public String toString() {

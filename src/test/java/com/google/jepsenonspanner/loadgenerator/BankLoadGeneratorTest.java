@@ -44,11 +44,11 @@ class BankLoadGeneratorTest {
 
   void checkStaleOps(List<StaleOperation> ops) {
     assertEquals(ops.size(), ACCT_NUM);
-//    int timePast = ops.get(0).getStaleness();
-//    for (StaleOperation op : ops) {
-//      checkRead(op);
-//      assertEquals(op.getStaleness(), timePast);
-//    }
+    int timePast = ops.get(0).getStaleness();
+    for (StaleOperation op : ops) {
+      checkRead(op);
+      assertEquals(op.getStaleness(), timePast);
+    }
   }
 
   void checkTransactionalOps(List<TransactionalOperation> ops) {
@@ -69,21 +69,21 @@ class BankLoadGeneratorTest {
       }
 
       // additionally, check functions of each transfer
-//      TransactionalOperation subtractOp = ops.get(0).getDependentOp();
-//      int transferAmt = subtractOp.getValue();
-//      assertTrue(subtractOp.decideProceed(transferAmt + 1));
-//      assertTrue(subtractOp.decideProceed(subtractOp.getValue()));
-//      assertFalse(subtractOp.decideProceed(transferAmt - 1));
-//      subtractOp.findDependentValue(transferAmt + 1);
-//      assertEquals(subtractOp.getValue(), 1);
-//
-//      TransactionalOperation addOp = ops.get(1).getDependentOp();
-//      int transferAmt2 = addOp.getValue();
-//      assertEquals(transferAmt, transferAmt2);
-//      // decide function will always return true, even if invalid; up to client to fail this txn
-//      assertTrue(addOp.decideProceed(transferAmt - 1));
-//      addOp.findDependentValue(addOp.getValue());
-//      assertEquals(addOp.getValue(), transferAmt2 * 2);
+      TransactionalOperation subtractOp = ops.get(0).getDependentOp();
+      int transferAmt = subtractOp.getValue();
+      assertTrue(subtractOp.decideProceed(transferAmt + 1));
+      assertTrue(subtractOp.decideProceed(subtractOp.getValue()));
+      assertFalse(subtractOp.decideProceed(transferAmt - 1));
+      subtractOp.findDependentValue(transferAmt + 1);
+      assertEquals(subtractOp.getValue(), 1);
+
+      TransactionalOperation addOp = ops.get(1).getDependentOp();
+      int transferAmt2 = addOp.getValue();
+      assertEquals(transferAmt, transferAmt2);
+      // decide function will always return true, even if invalid; up to client to fail this txn
+      assertTrue(addOp.decideProceed(transferAmt - 1));
+      addOp.findDependentValue(addOp.getValue());
+      assertEquals(addOp.getValue(), transferAmt2 * 2);
     }
   }
 
@@ -98,8 +98,8 @@ class BankLoadGeneratorTest {
     assertFalse(op.isRead());
     int acct = Integer.parseInt(op.getKey());
     assertTrue(acct >= 0 && acct < ACCT_NUM);
-//    int transferAmt = op.getValue();
-//    assertTrue(transferAmt <= MAX_BALANCE && transferAmt > 0);
+    int transferAmt = op.getValue();
+    assertTrue(transferAmt <= MAX_BALANCE && transferAmt > 0);
   }
 
 }
