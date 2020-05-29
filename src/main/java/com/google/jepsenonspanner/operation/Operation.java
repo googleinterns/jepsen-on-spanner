@@ -16,89 +16,13 @@ import java.util.Arrays;
  */
 public abstract class Operation {
 
-  /** Enum type to identify read or write */
-//  public enum OpType {
-//    READ,
-//    WRITE
-//  }
-
-//  private OpType op;
   private String key;
-  private int value;
+  private long value;
 
-  public Operation(String key, int value) {
+  public Operation(String key, long value) {
     this.key = key;
     this.value = value;
   }
-//  private boolean bounded;
-//
-//  // nonzero value means stale read
-//  private int millisecondsPast;
-//
-//  // the operation that depends on this instance
-//  private Operation dependent;
-//
-//  // not null if this is a dependent operation; a function that returns the value that depends on
-//  // a previous operation (usually a read)
-//  private BinaryOperator<Integer> findDependValFunc;
-//
-//  // not null if this is a dependent operation; a function that decides whether current operation
-//  // should proceed, depending on the return value of the previous operation (usually a read)
-//  private BiPredicate<Integer, Integer> decideProceedFunc;
-
-//  /**
-//   * Base constructor
-//   *
-//   * @param op the operation type
-//   * @param key key to operate on
-//   * @param value value to execute (null for read)
-//   * @param millisecondPast how many milliseconds in the past to read
-//   * @param dependent operation that depends on this instance
-//   * @param findDependValFunc function that returns the value that depends on a previous operation
-//   * @param decideProceedFunc function that decides whether current operation should proceed
-//   */
-//  public Operation(OpType op, String key, int value, int millisecondPast, Operation dependent,
-//                   BinaryOperator<Integer> findDependValFunc,
-//                   BiPredicate<Integer, Integer> decideProceedFunc, boolean bounded) {
-//    this.op = op;
-//    this.key = key;
-//    this.value = value;
-//    this.millisecondsPast = millisecondPast;
-//    this.dependent = dependent;
-//    this.findDependValFunc = findDependValFunc;
-//    this.decideProceedFunc = decideProceedFunc;
-//    this.bounded = bounded;
-//  }
-//
-//  /**
-//   * Constructor for a non-dependent stale read
-//   *
-//   * @see Operation#Operation(OpType, String, int, int, Operation, BinaryOperator, BiPredicate, boolean)
-//   */
-//  public Operation(OpType op, String key, int value, int millisecondsPast, boolean bounded) {
-//    this(op, key, value, millisecondsPast, null, null, null, bounded);
-//  }
-//
-//  /**
-//   * Constructor for a dependent transactional operation
-//   *
-//   * @see Operation#Operation(OpType, String, int, int, Operation, BinaryOperator, BiPredicate, boolean)
-//   */
-//  public Operation(OpType op, String key, int value,
-//                   BinaryOperator<Integer> findDependValFunc,
-//                   BiPredicate<Integer, Integer> decideProceedFunc) {
-//    this(op, key, value, 0, null, findDependValFunc, decideProceedFunc, false);
-//  }
-//
-//  /**
-//   * Constructor for a non-dependent transactional operation
-//   *
-//   * @see Operation#Operation(OpType, String, int, int, Operation, BinaryOperator, BiPredicate, boolean)
-//   */
-//  public Operation(OpType op, String key, int value) {
-//    this(op, key, value, 0, null, null, null, false);
-//  }
-
 
   public String getKey() {
     return key;
@@ -108,11 +32,11 @@ public abstract class Operation {
     this.key = key;
   }
 
-  public int getValue() {
+  public long getValue() {
     return value;
   }
 
-  public void setValue(int value) {
+  public void setValue(long value) {
     this.value = value;
   }
 
@@ -121,6 +45,6 @@ public abstract class Operation {
    */
   @Override
   public String toString() {
-    return String.join(" ", Arrays.asList(key, Integer.toString(value)));
+    return String.join(" ", Arrays.asList(key, Long.toString(value)));
   }
 }

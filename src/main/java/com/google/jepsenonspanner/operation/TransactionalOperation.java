@@ -15,11 +15,11 @@ public class TransactionalOperation extends Operation {
 
   // not null if this is a dependent operation; a function that returns the value that depends on
   // a previous operation (usually a read)
-  private BinaryOperator<Integer> findDependValFunc;
+  private BinaryOperator<Long> findDependValFunc;
 
   // not null if this is a dependent operation; a function that decides whether current operation
   // should proceed, depending on the return value of the previous operation (usually a read)
-  private BiPredicate<Integer, Integer> decideProceedFunc;
+  private BiPredicate<Long, Long> decideProceedFunc;
 
   /**
    * Constructor for a dependent transactional operation 
@@ -29,9 +29,9 @@ public class TransactionalOperation extends Operation {
    * @param findDependValFunc
    * @param decideProceedFunc   
    */
-  public TransactionalOperation(String key, int value, boolean isRead,
-                                BinaryOperator<Integer> findDependValFunc,
-                                BiPredicate<Integer, Integer> decideProceedFunc) {
+  public TransactionalOperation(String key, long value, boolean isRead,
+                                BinaryOperator<Long> findDependValFunc,
+                                BiPredicate<Long, Long> decideProceedFunc) {
     this(key, value, isRead, null, findDependValFunc, decideProceedFunc);
   }
 
@@ -41,7 +41,7 @@ public class TransactionalOperation extends Operation {
    * @param value
    * @param isRead
    */
-  public TransactionalOperation(String key, int value, boolean isRead) {
+  public TransactionalOperation(String key, long value, boolean isRead) {
     this(key, value, isRead, null, null, null);
   }
 
@@ -54,10 +54,10 @@ public class TransactionalOperation extends Operation {
    * @param findDependValFunc
    * @param decideProceedFunc
    */
-  public TransactionalOperation(String key, int value, boolean isRead,
+  public TransactionalOperation(String key, long value, boolean isRead,
                                 TransactionalOperation dependent,
-                                BinaryOperator<Integer> findDependValFunc,
-                                BiPredicate<Integer, Integer> decideProceedFunc) {
+                                BinaryOperator<Long> findDependValFunc,
+                                BiPredicate<Long, Long> decideProceedFunc) {
     super(key, value);
     this.isRead = isRead;
     this.dependent = dependent;
@@ -72,7 +72,8 @@ public class TransactionalOperation extends Operation {
    *
    * @param dependOn return value of the operation this depends on
    */
-  public boolean decideProceed(int dependOn) {
+  public boolean decideProceed(long dependOn) {
+    if (decideProceedFunc == null) return true;
     return decideProceedFunc.test(dependOn, getValue());
   }
 
@@ -81,7 +82,8 @@ public class TransactionalOperation extends Operation {
    *
    * @param dependOn return value of the operation this depends on
    */
-  public void findDependentValue(int dependOn) {
+  public void findDependentValue(long dependOn) {
+    if (findDependValFunc == null) return;
     setValue(findDependValFunc.apply(dependOn, getValue()));
   }
 

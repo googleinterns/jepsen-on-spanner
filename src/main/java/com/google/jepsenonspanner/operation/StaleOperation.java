@@ -5,7 +5,7 @@ public class StaleOperation extends Operation {
   private boolean bounded;
   private int staleness; // in milliseconds
 
-  public StaleOperation(String key, int value, boolean bounded, int staleness) {
+  public StaleOperation(String key, long value, boolean bounded, int staleness) {
     super(key, value);
     this.bounded = bounded;
     this.staleness = staleness;
