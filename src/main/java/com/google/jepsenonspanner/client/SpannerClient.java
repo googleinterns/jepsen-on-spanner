@@ -26,6 +26,7 @@ import com.google.spanner.admin.database.v1.CreateDatabaseMetadata;
 import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -36,10 +37,10 @@ public class SpannerClient {
   private DatabaseAdminClient adminClient;
   private DatabaseId databaseId;
 
-  private static final String TESTING_TABLE_NAME = "Testing";
-  private static final String HISTORY_TABLE_NAME = "History";
-  private static final String KEY_COLUMN_NAME = "Key";
-  private static final String VALUE_COLUMN_NAME = "Value";
+  public static final String TESTING_TABLE_NAME = "Testing";
+  public static final String HISTORY_TABLE_NAME = "History";
+  public static final String KEY_COLUMN_NAME = "Key";
+  public static final String VALUE_COLUMN_NAME = "Value";
 
   private static final Type Record = Type.struct(Arrays.asList(
           Type.StructField.of("OpType", Type.bool()),
@@ -49,8 +50,11 @@ public class SpannerClient {
 
   public SpannerClient(String instanceId, String dbId) {
     SpannerOptions options = SpannerOptions.newBuilder().build();
+    System.out.println("Here 1");
     Spanner spanner = options.getService();
+    System.out.println("Here 2");
     databaseId = DatabaseId.of(options.getProjectId(), instanceId, dbId);
+    System.out.println("Here 3");
     client = spanner.getDatabaseClient(databaseId);
     adminClient = spanner.getDatabaseAdminClient();
 
@@ -69,11 +73,15 @@ public class SpannerClient {
                             "    Value STRING(MAX) NOT NULL,\n" +
                             ") PRIMARY KEY(Key)\n"));
 
+    System.out.println("Here 3.5");
     try {
       Database db = op.get();
+      System.out.println("Here 4");
     } catch (ExecutionException e) {
       // If the operation failed during execution, expose the cause.
       // TODO: find a way to identify repeated create table and ignore that error
+      System.out.println("Here 5");
+      System.out.println(e.getMessage());
       throw (SpannerException) e.getCause();
     } catch (InterruptedException e) {
       // Throw when a thread is waiting, sleeping, or otherwise occupied,
@@ -82,55 +90,75 @@ public class SpannerClient {
     }
   }
 
-  public void executeOp(List<? extends Operation> ops, Recorder recorder) {
-    if (ops.isEmpty()) {
-      throw new RuntimeException("Empty operation to execute");
+  public DatabaseClient getDbClient() { return client; }
+
+  public HashMap<String, Long> readKeys(List<String> keys, int staleness, boolean bounded) {
+    HashMap<String, Long> result = new HashMap<>();
+    KeySet.Builder keySetBuilder = KeySet.newBuilder();
+    for (String key : keys) {
+      keySetBuilder.addKey(Key.of(key));
     }
-    Operation firstOp = ops.get(0);
-    if (firstOp instanceof StaleOperation) {
-      StaleOperation firstStaleOp = (StaleOperation) firstOp;
-      List<StaleOperation> result = new ArrayList<>();
-      try (ResultSet resultSet = client.singleUse(firstStaleOp.isBounded() ?
-              TimestampBound.ofMaxStaleness(firstStaleOp.getStaleness(), TimeUnit.MILLISECONDS) :
-              TimestampBound.ofExactStaleness(firstStaleOp.getStaleness(), TimeUnit.MILLISECONDS))
-              .read(TESTING_TABLE_NAME, getReadKeySet(ops), Arrays.asList(KEY_COLUMN_NAME,
-                      VALUE_COLUMN_NAME))) {
-        while (resultSet.next()) {
-          result.add(new StaleOperation(resultSet.getString(0), (int) resultSet.getLong(1),
-                  firstStaleOp.isBounded(), firstStaleOp.getStaleness()));
-        }
+    try (ResultSet resultSet = client.singleUse(bounded ?
+            TimestampBound.ofMaxStaleness(staleness, TimeUnit.MILLISECONDS) :
+            TimestampBound.ofExactStaleness(staleness, TimeUnit.MILLISECONDS))
+            .read(TESTING_TABLE_NAME, keySetBuilder.build(), Arrays.asList(KEY_COLUMN_NAME,
+                    VALUE_COLUMN_NAME))) {
+      while (resultSet.next()) {
+        result.put(resultSet.getString(KEY_COLUMN_NAME), resultSet.getLong(VALUE_COLUMN_NAME));
       }
-      recorder.recordStaleOps(result, client);
-    } else {
-      // this is a transaction
-      //8
-      client.readWriteTransaction().run(
-        new TransactionRunner.TransactionCallable<Void>() {
-          @Nullable
-          @Override
-          public Void run(TransactionContext transaction) throws Exception {
-            List<TransactionalOperation> operations = (List<TransactionalOperation>) ops;
-            for (TransactionalOperation op : operations) {
-              long dependentValue = -1;
-              for (; op != null; op = op.getDependentOp()) {
-                if (!op.decideProceed(dependentValue)) {
-                  return null;
-                  // abort the whole transaction if anything is determined as unable to proceed
-                }
-                op.findDependentValue(dependentValue);
-                if (op.isRead()) {
-                  dependentValue = executeTransactionalRead(op, transaction);
-                } else {
-                  executeTransactionalWrite(op, transaction);
-                }
-              }
-            }
-            return null;
-          }
-        }
-      );
     }
+    return result;
   }
+
+//  public void executeOp(List<? extends Operation> ops, Recorder recorder) {
+//    if (ops.isEmpty()) {
+//      throw new RuntimeException("Empty operation to execute");
+//    }
+//    Operation firstOp = ops.get(0);
+//    if (firstOp instanceof StaleOperation) {
+//      StaleOperation firstStaleOp = (StaleOperation) firstOp;
+//      List<StaleOperation> result = new ArrayList<>();
+//      try (ResultSet resultSet = client.singleUse(firstStaleOp.isBounded() ?
+//              TimestampBound.ofMaxStaleness(firstStaleOp.getStaleness(), TimeUnit.MILLISECONDS) :
+//              TimestampBound.ofExactStaleness(firstStaleOp.getStaleness(), TimeUnit.MILLISECONDS))
+//              .read(TESTING_TABLE_NAME, getReadKeySet(ops), Arrays.asList(KEY_COLUMN_NAME,
+//                      VALUE_COLUMN_NAME))) {
+//        while (resultSet.next()) {
+//          result.add(new StaleOperation(resultSet.getString(0), (int) resultSet.getLong(1),
+//                  firstStaleOp.isBounded(), firstStaleOp.getStaleness()));
+//        }
+//      }
+//      recorder.recordStaleOps(result, client);
+//    } else {
+//      // this is a transaction
+//      //8
+//      client.readWriteTransaction().run(
+//        new TransactionRunner.TransactionCallable<Void>() {
+//          @Nullable
+//          @Override
+//          public Void run(TransactionContext transaction) throws Exception {
+//            List<TransactionalOperation> operations = (List<TransactionalOperation>) ops;
+//            for (TransactionalOperation op : operations) {
+//              long dependentValue = -1;
+//              for (; op != null; op = op.getDependentOp()) {
+//                if (!op.decideProceed(dependentValue)) {
+//                  return null;
+//                  // abort the whole transaction if anything is determined as unable to proceed
+//                }
+//                op.findDependentValue(dependentValue);
+//                if (op.isRead()) {
+//                  dependentValue = executeTransactionalRead(op, transaction);
+//                } else {
+//                  executeTransactionalWrite(op, transaction);
+//                }
+//              }
+//            }
+//            return null;
+//          }
+//        }
+//      );
+//    }
+//  }
 
   public KeySet getReadKeySet(List<? extends Operation> ops) {
     KeySet.Builder keySetBuilder = KeySet.newBuilder();

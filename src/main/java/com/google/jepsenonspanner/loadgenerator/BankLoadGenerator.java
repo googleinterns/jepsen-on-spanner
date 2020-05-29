@@ -141,7 +141,7 @@ public class BankLoadGenerator extends LoadGenerator {
     int millisecondsPast = rand.nextInt(MAX_MILLISECOND_PAST) + 1; // prevent 0 ms in the past
     List<StaleOperation> transaction = new ArrayList<>();
     for (int i = 0; i < acctNumber; i++) {
-      transaction.add(new StaleOperation(Integer.toString(i), 0, bounded, millisecondsPast));
+//      transaction.add(new StaleOperation(Integer.toString(i), 0, bounded, millisecondsPast));
     }
     return transaction;
   }
