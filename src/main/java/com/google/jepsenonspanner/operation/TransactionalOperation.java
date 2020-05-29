@@ -6,9 +6,12 @@ import java.util.function.BinaryOperator;
 public class TransactionalOperation extends Operation {
   
   // true means read, false means write
-  private boolean isRead;
-  public static final boolean READ = true;
-  public static final boolean WRITE = false;
+  public enum Type {
+    READ,
+    WRITE
+  }
+
+  private Type opType;
 
   // the operation that depends on this instance
   private TransactionalOperation dependent;
@@ -25,47 +28,59 @@ public class TransactionalOperation extends Operation {
    * Constructor for a dependent transactional operation 
    * @param key 
    * @param value
-   * @param isRead
+   * @param opType
    * @param findDependValFunc
    * @param decideProceedFunc   
    */
-  public TransactionalOperation(String key, long value, boolean isRead,
+  public TransactionalOperation(String key, int value, Type opType,
                                 BinaryOperator<Long> findDependValFunc,
                                 BiPredicate<Long, Long> decideProceedFunc) {
-    this(key, value, isRead, null, findDependValFunc, decideProceedFunc);
+    this(key, value, opType, null, findDependValFunc, decideProceedFunc);
   }
 
   /**
    * Constructor for a non-dependent transactional operation
    * @param key
    * @param value
-   * @param isRead
+   * @param opType
    */
-  public TransactionalOperation(String key, long value, boolean isRead) {
-    this(key, value, isRead, null, null, null);
+  public TransactionalOperation(String key, int value, Type opType) {
+    this(key, value, opType, null, null, null);
   }
 
   /**
    * Base constructor
    * @param key 
    * @param value
-   * @param isRead
+   * @param opType
    * @param dependent
    * @param findDependValFunc
    * @param decideProceedFunc
    */
-  public TransactionalOperation(String key, long value, boolean isRead,
+  public TransactionalOperation(String key, int value, Type opType,
                                 TransactionalOperation dependent,
                                 BinaryOperator<Long> findDependValFunc,
                                 BiPredicate<Long, Long> decideProceedFunc) {
     super(key, value);
-    this.isRead = isRead;
+    this.opType = opType;
     this.dependent = dependent;
     this.findDependValFunc = findDependValFunc;
     this.decideProceedFunc = decideProceedFunc;
   }
   
-  
+  public static TransactionalOperation createTransactionalRead(String key) {
+    return new TransactionalOperation(key, 0, Type.READ, null, null, null);
+  }
+
+  public static TransactionalOperation createTransactionalWrite(String key, int value) {
+    return new TransactionalOperation(key, value, Type.WRITE, null, null, null);
+  }
+
+  public static TransactionalOperation createDependentTransactionalWrite(String key, int value,
+                                                                         BinaryOperator<Long> findDependValFunc,
+                                                                         BiPredicate<Long, Long> decideProceedFunc) {
+    return new TransactionalOperation(key, value, Type.WRITE, null, findDependValFunc, decideProceedFunc);
+  }
   
   /**
    * Decides if current operation should be executed
@@ -97,19 +112,19 @@ public class TransactionalOperation extends Operation {
   }
 
   /**
-   * Return the dependent operation that relies on this operation
+   * Returns the dependent operation that relies on this operation
    */
   public TransactionalOperation getDependentOp() {
     return dependent;
   }
 
   public boolean isRead() {
-    return isRead;
+    return opType == Type.READ;
   }
 
   @Override
   public String toString() {
-    return String.format("%s %s, dependent = [ %s ]", isRead ? "Strong Read" : "Write",
+    return String.format("%s %s, dependent = [ %s ]", isRead() ? "Strong Read" : "Write",
             super.toString(), dependent.toString());
   }
 }
