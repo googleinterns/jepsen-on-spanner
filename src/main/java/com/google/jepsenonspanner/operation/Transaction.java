@@ -41,7 +41,6 @@ public class Transaction implements OperationList {
     client.runTxn(transactionToRun);
   }
 
-  @Override
   public void record(Recorder recorder) {
 
   }

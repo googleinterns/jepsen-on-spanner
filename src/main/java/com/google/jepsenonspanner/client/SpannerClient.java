@@ -53,6 +53,9 @@ public class SpannerClient {
   private static final String TIME_COLUMN_NAME = "Time";
   private static final String PID_COLUMN_NAME = "ProcessID";
   private static final String INVOKE = "invoke";
+  private static final String OK = "ok";
+  private static final String FAIL = "fail";
+  private static final String INFO = "info";
 
   private static final Type Record = Type.struct(Arrays.asList(
           Type.StructField.of(OPTYPE_COLUMN_NAME, Type.bool()),
@@ -155,29 +158,50 @@ public class SpannerClient {
   }
 
   public void recordInvoke(List<String> keys) {
+    recordList(keys, INVOKE);
+  }
+
+  public void recordComplete(HashMap<String, Long> keyValues, Timestamp timestamp) {
+    List<Struct> recordOps = new ArrayList<>();
+    List<Struct> recordOpsInvoke = new ArrayList<>();
+    for (Map.Entry<String, Long> kv : keyValues.entrySet()) {
+      recordOps.add(Struct.newBuilder()
+              .set(OPTYPE_COLUMN_NAME).to(true)
+              .set(KEY_COLUMN_NAME).to(kv.getKey())
+              .set(VALUE_COLUMN_NAME).to(kv.getValue()).build());
+      recordOps.add(Struct.newBuilder()
+              .set(OPTYPE_COLUMN_NAME).to(true)
+              .set(KEY_COLUMN_NAME).to(kv.getKey()).build());
+    } 
+    client.write(Arrays.asList(
+            Mutation.newInsertBuilder(HISTORY_TABLE_NAME)
+                    .set(TIME_COLUMN_NAME).to(timestamp)
+                    .set(OPTYPE_COLUMN_NAME).to(OK)
+                    .set(VALUE_COLUMN_NAME).toStructArray(Record, recordOps)
+                    .set(PID_COLUMN_NAME).to(processID).build(),
+            Mutation.newUpdateBuilder(HISTORY_TABLE_NAME)
+                    .set(TIME_COLUMN_NAME).to(timestamp)
+                    .set(OPTYPE_COLUMN_NAME).to(INVOKE)
+                    .set(VALUE_COLUMN_NAME).toStructArray(Record, recordOpsInvoke).build()));
+  }
+
+  public void recordFail(List<String> keys) {
+    recordList(keys, FAIL);
+  }
+
+  public void recordInfo(List<String> keys) {
+    recordList(keys, INFO);
+  }
+
+  private void recordList(List<String> keys, String opType) {
     List<Struct> recordOps = new ArrayList<>();
     for (String key : keys) {
       recordOps.add(Struct.newBuilder()
               .set(OPTYPE_COLUMN_NAME).to(true).set(KEY_COLUMN_NAME).to(key).build());
     }
     client.write(Arrays.asList(Mutation.newInsertBuilder(HISTORY_TABLE_NAME)
-                    .set(TIME_COLUMN_NAME).to(Value.COMMIT_TIMESTAMP)
-                    .set(OPTYPE_COLUMN_NAME).to(INVOKE)
-                    .set(VALUE_COLUMN_NAME).toStructArray(Record, recordOps)
-                    .set(PID_COLUMN_NAME).to(processID).build()));
-  }
-
-  public void recordComplete(HashMap<String, Long> keyValues, Timestamp timestamp) {
-    List<Struct> recordOps = new ArrayList<>();
-    for (Map.Entry<String, Long> kv : keyValues.entrySet()) {
-      recordOps.add(Struct.newBuilder()
-              .set(OPTYPE_COLUMN_NAME).to(true)
-              .set(KEY_COLUMN_NAME).to(kv.getKey())
-              .set(VALUE_COLUMN_NAME).to(kv.getValue()).build());
-    } 
-    client.write(Arrays.asList(Mutation.newInsertBuilder(HISTORY_TABLE_NAME)
-            .set(TIME_COLUMN_NAME).to(timestamp)
-            .set(OPTYPE_COLUMN_NAME).to(INVOKE)
+            .set(TIME_COLUMN_NAME).to(Value.COMMIT_TIMESTAMP)
+            .set(OPTYPE_COLUMN_NAME).to(opType)
             .set(VALUE_COLUMN_NAME).toStructArray(Record, recordOps)
             .set(PID_COLUMN_NAME).to(processID).build()));
   }
