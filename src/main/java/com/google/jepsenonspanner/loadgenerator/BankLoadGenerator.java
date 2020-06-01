@@ -132,8 +132,7 @@ public class BankLoadGenerator extends LoadGenerator {
   private List<TransactionalOperation> strongRead() {
     List<TransactionalOperation> transaction = new ArrayList<>();
     for (int i = 0; i < acctNumber; i++) {
-      transaction.add(new TransactionalOperation(Integer.toString(i), 0,
-              TransactionalOperation.Type.READ));
+      transaction.add(TransactionalOperation.createTransactionalRead(Integer.toString(i)));
     }
     return transaction;
   }
@@ -154,20 +153,18 @@ public class BankLoadGenerator extends LoadGenerator {
     int[] accounts = rand.ints(0, acctNumber).distinct().limit(2).toArray();
     int acct1 = accounts[0];
     int acct2 = accounts[1];
-    transaction.add(new TransactionalOperation(Integer.toString(acct1), 0,
-            TransactionalOperation.Type.READ));
-    transaction.add(new TransactionalOperation(Integer.toString(acct2), 0,
-            TransactionalOperation.Type.READ));
+    transaction.add(TransactionalOperation.createTransactionalRead(Integer.toString(acct1)));
+    transaction.add(TransactionalOperation.createTransactionalRead(Integer.toString(acct2)));
 
     // add the dependent write operations
     int transferAmount = rand.nextInt(this.maxBalance) + 1;
-    TransactionalOperation acct1Write = new TransactionalOperation(Integer.toString(acct1),
-            transferAmount, TransactionalOperation.Type.WRITE,
+    TransactionalOperation acct1Write = TransactionalOperation.createDependentTransactionalWrite(
+            Integer.toString(acct1), transferAmount,
             (balance, transfer) -> balance - transfer,
             (balance, transfer) -> balance >= transfer);
     transaction.get(0).setDependentOp(acct1Write);
-    TransactionalOperation acct2Write = new TransactionalOperation(Integer.toString(acct2),
-            transferAmount, TransactionalOperation.Type.WRITE,
+    TransactionalOperation acct2Write = TransactionalOperation.createDependentTransactionalWrite(
+            Integer.toString(acct1), transferAmount,
             (balance, transfer) -> balance + transfer,
             (balance, transfer) -> true);
     transaction.get(1).setDependentOp(acct2Write);
