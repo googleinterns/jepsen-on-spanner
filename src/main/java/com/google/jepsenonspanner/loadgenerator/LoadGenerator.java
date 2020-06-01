@@ -1,5 +1,7 @@
 package com.google.jepsenonspanner.loadgenerator;
 
+import com.google.jepsenonspanner.operation.Operation;
+
 import java.util.List;
 
 /**
@@ -7,15 +9,23 @@ import java.util.List;
  * Each generator must implement this interface
  *
  */
-public interface LoadGenerator {
+public abstract class LoadGenerator {
+
+  protected int opLimit = 0;
+
+  public LoadGenerator(int opLimit) {
+    this.opLimit = opLimit;
+  }
 
   /**
    * Returns the next operations for the client wrapper to execute
    */
-  public List<Operation> nextOperation();
+  public abstract List<? extends Operation> nextOperation() throws RuntimeException;
 
   /**
    * Returns if the generator has more loads
    */
-  public boolean hasLoad();
+  public boolean hasLoad() {
+    return opLimit > 0;
+  }
 }
