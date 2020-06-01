@@ -2,9 +2,7 @@ package com.google.jepsenonspanner.client;
 
 import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.*;
-
-class SpannerClientTest {
+class ExecutorTest {
 
   @Test
   void testInit() {
@@ -13,6 +11,6 @@ class SpannerClientTest {
     System.out.println("HERE WHAT");
     System.out.flush();
     System.setProperty("SPANNER_EMULATOR_HOST", "localhost:9010");
-    SpannerClient client = new SpannerClient(instanceId, dbId);
+    Executor client = new Executor(instanceId, dbId, 0);
   }
 }

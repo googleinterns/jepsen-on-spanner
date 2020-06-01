@@ -2,9 +2,7 @@ package com.google.jepsenonspanner.operation;
 
 import com.google.cloud.Timestamp;
 import com.google.cloud.spanner.SpannerException;
-import com.google.jepsenonspanner.client.Recorder;
-import com.google.jepsenonspanner.client.SpannerClient;
-import io.opencensus.trace.Span;
+import com.google.jepsenonspanner.client.Executor;
 import org.apache.commons.lang3.tuple.Pair;
 
 import java.util.ArrayList;
@@ -26,21 +24,24 @@ public class StaleOps implements OperationList {
   }
 
   @Override
-  public void executeOps(SpannerClient client) {
+  public void executeOps(Executor client) {
     List<String> keys = new ArrayList<>();
     for (StaleOperation op : ops) {
       keys.add(op.getKey());
     }
     try {
+      client.recordInvoke(keys);
       Pair<HashMap<String, Long>, Timestamp> result = client.readKeys(keys, staleness, bounded);
       HashMap<String, Long> keyValues = result.getLeft();
       Timestamp readTimeStamp = result.getRight();
+      client.recordComplete(keyValues, readTimeStamp);
     } catch (SpannerException e) {
-      this.failed = true;
+      // TODO: figure out how to differentiate between fail and info
+      client.recordFail(keys);
     }
   }
 
-  public void recordInvoke(SpannerClient client, List<String> keys) throws RuntimeException {
+  public void recordInvoke(Executor client, List<String> keys) throws RuntimeException {
     try {
       client.recordInvoke(keys);
     } catch (SpannerException e) {
@@ -48,7 +49,7 @@ public class StaleOps implements OperationList {
     }
   }
 
-  public void recordComplete(SpannerClient client, HashMap<String, Long> keyValues,
+  public void recordComplete(Executor client, HashMap<String, Long> keyValues,
                              Timestamp readTimeStamp) throws RuntimeException {
     try {
       client.recordComplete(keyValues, readTimeStamp);

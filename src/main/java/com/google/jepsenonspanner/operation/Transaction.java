@@ -2,25 +2,23 @@ package com.google.jepsenonspanner.operation;
 
 import com.google.cloud.spanner.TransactionContext;
 import com.google.jepsenonspanner.client.Recorder;
-import com.google.jepsenonspanner.client.SpannerClient;
+import com.google.jepsenonspanner.client.Executor;
 
-import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
-import javax.annotation.Nullable;
 
 public class Transaction implements OperationList {
 
   private List<TransactionalOperation> ops;
+  private boolean readOnly;
 
-  public Transaction(List<TransactionalOperation> ops) {
+  public Transaction(List<TransactionalOperation> ops, boolean readOnly) {
     this.ops = ops;
+    this.readOnly = readOnly;
   }
 
   @Override
-  public void executeOps(SpannerClient client) {
+  public void executeOps(Executor client) {
     Consumer<TransactionContext> transactionToRun = transaction /* type: TransactionContext*/ -> {
       for (TransactionalOperation op : ops) {
         long dependentValue = -1;
@@ -38,7 +36,7 @@ public class Transaction implements OperationList {
         }
       }
     };
-    client.runTxn(transactionToRun);
+    client.runTxn(transactionToRun, readOnly);
   }
 
   public void record(Recorder recorder) {

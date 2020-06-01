@@ -38,7 +38,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
-public class SpannerClient {
+public class Executor {
 
   private DatabaseClient client;
   private DatabaseAdminClient adminClient;
@@ -63,7 +63,7 @@ public class SpannerClient {
           Type.StructField.of(VALUE_COLUMN_NAME, Type.int64())
   ));
 
-  public SpannerClient(String instanceId, String dbId, int processID) {
+  public Executor(String instanceId, String dbId, int processID) {
     SpannerOptions options = SpannerOptions.newBuilder().build();
     Spanner spanner = options.getService();
     this.databaseId = DatabaseId.of(options.getProjectId(), instanceId, dbId);
@@ -127,7 +127,12 @@ public class SpannerClient {
     return Pair.of(result, readTimeStamp);
   }
 
-  public void runTxn(Consumer<TransactionContext> transactionToRun) {
+  public void runTxn(Consumer<TransactionContext> transactionToRun, boolean readOnly) {
+    if (readOnly) {
+      try (ReadOnlyTransaction txn = client.singleUseReadOnlyTransaction()) {
+        
+      }
+    }
     client.readWriteTransaction().run(new TransactionRunner.TransactionCallable<Void>() {
       @Nullable
       @Override

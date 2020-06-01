@@ -1,10 +1,9 @@
 package com.google.jepsenonspanner.operation;
 
-import com.google.jepsenonspanner.client.Recorder;
-import com.google.jepsenonspanner.client.SpannerClient;
+import com.google.jepsenonspanner.client.Executor;
 
 public interface OperationList {
-  public void executeOps(SpannerClient client);
+  public void executeOps(Executor client);
 
 //  public void record(Recorder recorder);
 }

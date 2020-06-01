@@ -1,6 +1,5 @@
 package com.google.jepsenonspanner.loadgenerator;
 
-import com.google.jepsenonspanner.operation.Operation;
 import com.google.jepsenonspanner.operation.OperationList;
 import com.google.jepsenonspanner.operation.StaleOperation;
 import com.google.jepsenonspanner.operation.StaleOps;
@@ -137,7 +136,7 @@ public class BankLoadGenerator extends LoadGenerator {
     for (int i = 0; i < acctNumber; i++) {
       transaction.add(TransactionalOperation.createTransactionalRead(String.valueOf(i)));
     }
-    return new Transaction(transaction);
+    return new Transaction(transaction, readOnly);
   }
 
   private StaleOps staleRead(boolean bounded) {
@@ -172,6 +171,6 @@ public class BankLoadGenerator extends LoadGenerator {
                     (balance, transfer) -> true);
     transaction.get(1).setDependentOp(acct2Write);
 
-    return new Transaction(transaction);
+    return new Transaction(transaction, readOnly);
   }
 }
