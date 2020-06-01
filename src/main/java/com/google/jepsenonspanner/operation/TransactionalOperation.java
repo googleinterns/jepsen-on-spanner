@@ -25,7 +25,8 @@ public class TransactionalOperation extends Operation {
   private BiPredicate<Integer, Integer> decideProceedFunc;
 
   /**
-   * Constructor for a dependent transactional operation 
+   * Constructor for a dependent transactional operation i.e. this operation depends on the
+   * result of another operation
    * @param key 
    * @param value
    * @param opType

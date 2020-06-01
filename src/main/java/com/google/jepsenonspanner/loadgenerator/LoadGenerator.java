@@ -20,7 +20,7 @@ public abstract class LoadGenerator {
   /**
    * Returns the next operations for the client wrapper to execute
    */
-  public abstract List<? extends Operation> nextOperation();
+  public abstract List<? extends Operation> nextOperation() throws RuntimeException;
 
   /**
    * Returns if the generator has more loads

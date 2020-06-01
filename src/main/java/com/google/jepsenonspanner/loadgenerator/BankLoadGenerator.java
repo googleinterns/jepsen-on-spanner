@@ -94,7 +94,7 @@ public class BankLoadGenerator extends LoadGenerator {
    *
    * @see BankLoadGenerator#BankLoadGenerator(int, int, int, Config, int)
    */
-  public BankLoadGenerator(int opLimit, int maxBalance, int acctNumber, Config config) {
+  public BankLoadGenerator(int opLimit, int maxBalance, int acctNumber, Config config) throws RuntimeException {
     this(opLimit, maxBalance, acctNumber, config, /*seed=*/new Random().nextInt());
   }
 
@@ -109,7 +109,7 @@ public class BankLoadGenerator extends LoadGenerator {
   }
 
   @Override
-  public List<? extends Operation> nextOperation() {
+  public List<? extends Operation> nextOperation() throws RuntimeException {
     // check if reached limit
     if (opLimit <= 0) {
       throw new RuntimeException("Bank generator has reached limit");
