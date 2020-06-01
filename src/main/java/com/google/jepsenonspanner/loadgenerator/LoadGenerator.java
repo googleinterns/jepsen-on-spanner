@@ -1,6 +1,7 @@
 package com.google.jepsenonspanner.loadgenerator;
 
 import com.google.jepsenonspanner.operation.Operation;
+import com.google.jepsenonspanner.operation.OperationList;
 
 import java.util.List;
 
@@ -20,7 +21,7 @@ public abstract class LoadGenerator {
   /**
    * Returns the next operations for the client wrapper to execute
    */
-  public abstract List<? extends Operation> nextOperation();
+  public abstract OperationList nextOperation();
 
   /**
    * Returns if the generator has more loads

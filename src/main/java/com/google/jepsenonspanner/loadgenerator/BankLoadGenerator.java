@@ -1,7 +1,10 @@
 package com.google.jepsenonspanner.loadgenerator;
 
 import com.google.jepsenonspanner.operation.Operation;
+import com.google.jepsenonspanner.operation.OperationList;
 import com.google.jepsenonspanner.operation.StaleOperation;
+import com.google.jepsenonspanner.operation.StaleOps;
+import com.google.jepsenonspanner.operation.Transaction;
 import com.google.jepsenonspanner.operation.TransactionalOperation;
 
 import java.util.ArrayList;
@@ -109,7 +112,7 @@ public class BankLoadGenerator extends LoadGenerator {
   }
 
   @Override
-  public List<? extends Operation> nextOperation() {
+  public OperationList nextOperation() {
     // check if reached limit
     if (opLimit <= 0) {
       throw new RuntimeException("Bank generator has reached limit");
@@ -129,49 +132,46 @@ public class BankLoadGenerator extends LoadGenerator {
     }
   }
 
-  private List<TransactionalOperation> strongRead() {
+  private Transaction strongRead() {
     List<TransactionalOperation> transaction = new ArrayList<>();
     for (int i = 0; i < acctNumber; i++) {
-      transaction.add(new TransactionalOperation(Integer.toString(i), 0,
-              TransactionalOperation.Type.READ));
+      transaction.add(TransactionalOperation.createTransactionalRead(String.valueOf(i)));
     }
-    return transaction;
+    return new Transaction(transaction);
   }
 
-  private List<StaleOperation> staleRead(boolean bounded) {
+  private StaleOps staleRead(boolean bounded) {
     int millisecondsPast = rand.nextInt(MAX_MILLISECOND_PAST) + 1; // prevent 0 ms in the past
     List<StaleOperation> staleOperations = new ArrayList<>();
     for (int i = 0; i < acctNumber; i++) {
-      staleOperations.add(new StaleOperation(Integer.toString(i), 0, bounded, millisecondsPast));
+      staleOperations.add(new StaleOperation(Integer.toString(i)));
     }
-    return staleOperations;
+    return new StaleOps(staleOperations, millisecondsPast, bounded);
   }
 
-  private List<TransactionalOperation> transfer() {
+  private Transaction transfer() {
     List<TransactionalOperation> transaction = new ArrayList<>();
 
     // transfer from account 1 to account 2
     int[] accounts = rand.ints(0, acctNumber).distinct().limit(2).toArray();
-    int acct1 = accounts[0];
-    int acct2 = accounts[1];
-    transaction.add(new TransactionalOperation(Integer.toString(acct1), 0,
-            TransactionalOperation.Type.READ));
-    transaction.add(new TransactionalOperation(Integer.toString(acct2), 0,
-            TransactionalOperation.Type.READ));
+    String acct1 = String.valueOf(accounts[0]);
+    String acct2 = String.valueOf(accounts[1]);
+    transaction.add(TransactionalOperation.createTransactionalRead(acct1));
+    transaction.add(TransactionalOperation.createTransactionalRead(acct2));
 
     // add the dependent write operations
     int transferAmount = rand.nextInt(this.maxBalance) + 1;
-    TransactionalOperation acct1Write = new TransactionalOperation(Integer.toString(acct1),
-            transferAmount, TransactionalOperation.Type.WRITE,
-            (balance, transfer) -> balance - transfer,
-            (balance, transfer) -> balance >= transfer);
+    TransactionalOperation acct1Write =
+            TransactionalOperation.createDependentTransactionalWrite(acct1, transferAmount,
+                    (balance, transfer) -> balance - transfer,
+                    (balance, transfer) -> balance >= transfer);
     transaction.get(0).setDependentOp(acct1Write);
-    TransactionalOperation acct2Write = new TransactionalOperation(Integer.toString(acct2),
-            transferAmount, TransactionalOperation.Type.WRITE,
-            (balance, transfer) -> balance + transfer,
-            (balance, transfer) -> true);
+    TransactionalOperation acct2Write =
+            TransactionalOperation.createDependentTransactionalWrite(acct2, transferAmount,
+                    (balance, transfer) -> balance + transfer,
+                    (balance, transfer) -> true);
     transaction.get(1).setDependentOp(acct2Write);
 
-    return transaction;
+    return new Transaction(transaction);
   }
 }

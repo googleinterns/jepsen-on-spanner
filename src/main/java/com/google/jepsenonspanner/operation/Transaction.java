@@ -1,7 +1,6 @@
 package com.google.jepsenonspanner.operation;
 
-import com.google.cloud.spanner.ResultSet;
-import com.google.cloud.spanner.TimestampBound;
+import com.google.cloud.spanner.TransactionContext;
 import com.google.jepsenonspanner.client.Recorder;
 import com.google.jepsenonspanner.client.SpannerClient;
 
@@ -9,6 +8,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
+import javax.annotation.Nullable;
 
 public class Transaction implements OperationList {
 
@@ -20,18 +21,24 @@ public class Transaction implements OperationList {
 
   @Override
   public void executeOps(SpannerClient client) {
-//    StaleOperation firstStaleOp = (StaleOperation) firstOp;
-//    List<StaleOperation> result = new ArrayList<>();
-//    try (ResultSet resultSet = client.singleUse(firstStaleOp.isBounded() ?
-//            TimestampBound.ofMaxStaleness(firstStaleOp.getStaleness(), TimeUnit.MILLISECONDS) :
-//            TimestampBound.ofExactStaleness(firstStaleOp.getStaleness(), TimeUnit.MILLISECONDS))
-//            .read(TESTING_TABLE_NAME, getReadKeySet(ops), Arrays.asList(KEY_COLUMN_NAME,
-//                    VALUE_COLUMN_NAME))) {
-//      while (resultSet.next()) {
-//        result.add(new StaleOperation(resultSet.getString(0), (int) resultSet.getLong(1),
-//                firstStaleOp.isBounded(), firstStaleOp.getStaleness()));
-//      }
-//    }
+    Consumer<TransactionContext> transactionToRun = transaction /* type: TransactionContext*/ -> {
+      for (TransactionalOperation op : ops) {
+        long dependentValue = -1;
+        for (; op != null; op = op.getDependentOp()) {
+          if (!op.decideProceed(dependentValue)) {
+            return;
+            // abort the whole transaction if anything is determined as unable to proceed
+          }
+          op.findDependentValue(dependentValue);
+          if (op.isRead()) {
+            dependentValue = client.executeTransactionalRead(op, transaction);
+          } else {
+            client.executeTransactionalWrite(op, transaction);
+          }
+        }
+      }
+    };
+    client.runTxn(transactionToRun);
   }
 
   @Override
