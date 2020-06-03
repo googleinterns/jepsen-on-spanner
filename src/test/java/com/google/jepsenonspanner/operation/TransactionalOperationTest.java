@@ -13,9 +13,10 @@ class TransactionalOperationTest {
   private static final int ZERO = 0;
 
   private static final TransactionalOperation STRONG_READ = new TransactionalOperation(KEY, 0,
-          TransactionalOperation.READ);
+          TransactionalOperation.Type.READ);
   private static final TransactionalOperation DEPENDENT_WRITE = new TransactionalOperation(KEY,
-          VALUE, TransactionalOperation.WRITE, (s1, s2) -> s1 + s2, (s1, s2) -> s1 > 0 && s2 > 0);
+          VALUE, TransactionalOperation.Type.WRITE, (s1, s2) -> s1 + s2,
+          (s1, s2) -> s1 > 0 && s2 > 0);
 
   @Test
   void testToString() {

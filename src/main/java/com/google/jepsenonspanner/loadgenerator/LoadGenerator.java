@@ -1,9 +1,6 @@
 package com.google.jepsenonspanner.loadgenerator;
 
-import com.google.jepsenonspanner.operation.Operation;
 import com.google.jepsenonspanner.operation.OperationList;
-
-import java.util.List;
 
 /**
  * A load generator generates testing load for the client to interact with the Spanner instance.

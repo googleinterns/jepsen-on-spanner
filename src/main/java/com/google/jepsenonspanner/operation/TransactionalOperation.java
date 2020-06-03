@@ -3,7 +3,10 @@ package com.google.jepsenonspanner.operation;
 import java.util.function.BiPredicate;
 import java.util.function.BinaryOperator;
 
-public class TransactionalOperation extends Operation {
+public class TransactionalOperation {
+
+  private String key;
+  private long value;
   
   // true means read, false means write
   public enum Type {
@@ -61,7 +64,8 @@ public class TransactionalOperation extends Operation {
                                 TransactionalOperation dependent,
                                 BinaryOperator<Long> findDependValFunc,
                                 BiPredicate<Long, Long> decideProceedFunc) {
-    super(key, value);
+    this.key = key;
+    this.value = value;
     this.opType = opType;
     this.dependent = dependent;
     this.findDependValFunc = findDependValFunc;
@@ -89,7 +93,7 @@ public class TransactionalOperation extends Operation {
    */
   public boolean decideProceed(long dependOn) {
     if (decideProceedFunc == null) return true;
-    return decideProceedFunc.test(dependOn, getValue());
+    return decideProceedFunc.test(dependOn, value);
   }
 
   /**
@@ -99,7 +103,7 @@ public class TransactionalOperation extends Operation {
    */
   public void findDependentValue(long dependOn) {
     if (findDependValFunc == null) return;
-    setValue(findDependValFunc.apply(dependOn, getValue()));
+    this.value = findDependValFunc.apply(dependOn, value);
   }
 
   /**
@@ -120,6 +124,14 @@ public class TransactionalOperation extends Operation {
 
   public boolean isRead() {
     return opType == Type.READ;
+  }
+
+  public String getKey() {
+    return key;
+  }
+
+  public long getValue() {
+    return value;
   }
 
   @Override

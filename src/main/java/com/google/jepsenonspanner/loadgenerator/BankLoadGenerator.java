@@ -1,12 +1,12 @@
 package com.google.jepsenonspanner.loadgenerator;
 
 import com.google.jepsenonspanner.operation.OperationList;
-import com.google.jepsenonspanner.operation.StaleOperation;
-import com.google.jepsenonspanner.operation.StaleOps;
-import com.google.jepsenonspanner.operation.Transaction;
+import com.google.jepsenonspanner.operation.ReadTransaction;
+import com.google.jepsenonspanner.operation.ReadWriteTransaction;
 import com.google.jepsenonspanner.operation.TransactionalOperation;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Random;
 
@@ -70,6 +70,8 @@ public class BankLoadGenerator extends LoadGenerator {
   private Config config;
 
   private static final int MAX_MILLISECOND_PAST = 5 * 60 * 1000; // 5 minutes
+  public static final String READ_LOAD_NAME = "read";
+  public static final String TRANSFER_LOAD_NAME = "transfer";
 
   /**
    * Constructor for the bank load generator specifying seed
@@ -121,34 +123,38 @@ public class BankLoadGenerator extends LoadGenerator {
     int nextOp = rand.nextInt();
     switch (config.categorize(nextOp)) {
       case STRONG_READ:
-        return strongRead();
+        return read(/*stale=*/false);
       case BOUNDED_STALE_READ:
-        return staleRead(/*bounded=*/true);
+        return read(/*stale=*/true, /*bounded=*/true);
       case EXACT_STALE_READ:
-        return staleRead(/*bounded=*/false);
+        return read(/*stale=*/true);
       default:
         return transfer();
     }
   }
 
-  private Transaction strongRead() {
-    List<TransactionalOperation> transaction = new ArrayList<>();
-    for (int i = 0; i < acctNumber; i++) {
-      transaction.add(TransactionalOperation.createTransactionalRead(String.valueOf(i)));
+  private ReadTransaction read(boolean stale, boolean bounded) {
+    int millisecondsPast = 0;
+    if (stale) {
+      millisecondsPast = rand.nextInt(MAX_MILLISECOND_PAST) + 1; // prevent 0 ms in the past
     }
-    return new Transaction(transaction, readOnly);
+    List<String> keys = new ArrayList<>();
+    for (int i = 0; i < acctNumber; i++) {
+      keys.add(Integer.toString(i));
+    }
+    // All the record representation fields are null, because we read across all accounts
+    if (!stale)
+      return ReadTransaction.createStrongRead(READ_LOAD_NAME, keys);
+    if (bounded)
+      return ReadTransaction.createBoundedStaleRead(READ_LOAD_NAME, keys, millisecondsPast);
+    return ReadTransaction.createExactStaleRead(READ_LOAD_NAME, keys, millisecondsPast);
   }
 
-  private StaleOps staleRead(boolean bounded) {
-    int millisecondsPast = rand.nextInt(MAX_MILLISECOND_PAST) + 1; // prevent 0 ms in the past
-    List<StaleOperation> staleOperations = new ArrayList<>();
-    for (int i = 0; i < acctNumber; i++) {
-      staleOperations.add(new StaleOperation(Integer.toString(i)));
-    }
-    return new StaleOps(staleOperations, millisecondsPast, bounded);
+  private ReadTransaction read(boolean stale) {
+    return read(stale, false);
   }
 
-  private Transaction transfer() {
+  private ReadWriteTransaction transfer() {
     List<TransactionalOperation> transaction = new ArrayList<>();
 
     // transfer from account 1 to account 2
@@ -171,6 +177,7 @@ public class BankLoadGenerator extends LoadGenerator {
                     (balance, transfer) -> true);
     transaction.get(1).setDependentOp(acct2Write);
 
-    return new Transaction(transaction, readOnly);
+    return new ReadWriteTransaction(TRANSFER_LOAD_NAME, Collections.singletonList(String.format(
+            "%s %s %d", acct1, acct2, transferAmount)), transaction);
   }
 }

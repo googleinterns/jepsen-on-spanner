@@ -2,8 +2,24 @@ package com.google.jepsenonspanner.operation;
 
 import com.google.jepsenonspanner.client.Executor;
 
-public interface OperationList {
-  public void executeOps(Executor client);
+import java.util.List;
 
-//  public void record(Recorder recorder);
+public abstract class OperationList {
+  private String loadName;
+  private List<String> recordRepresentation;
+
+  public OperationList(String loadName, List<String> recordRepresentation) {
+    this.loadName = loadName;
+    this.recordRepresentation = recordRepresentation;
+  }
+
+  public abstract void executeOps(Executor client);
+
+  public String getLoadName() {
+    return loadName;
+  }
+
+  public List<String> getRecordRepresentation() {
+    return recordRepresentation;
+  }
 }
