@@ -26,7 +26,7 @@ class ExecutorTest {
   private static final String INSTANCE_ID = "test-instance";
   private static final String DATABASE_ID = "example-db";
   private static int PID = 0;
-  static Executor client = new Executor(INSTANCE_ID, DATABASE_ID, PID);
+  static Executor executor = new Executor(INSTANCE_ID, DATABASE_ID, PID);
   private static String LOAD_NAME = "transfer";
   private List<String> representation;
 
@@ -40,7 +40,7 @@ class ExecutorTest {
 
   @AfterEach
   void cleanup() {
-    client.getClient().write(Arrays.asList(Mutation.delete(Executor.TESTING_TABLE_NAME, KeySet.all()),
+    executor.getClient().write(Arrays.asList(Mutation.delete(Executor.TESTING_TABLE_NAME, KeySet.all()),
             Mutation.delete(Executor.HISTORY_TABLE_NAME, KeySet.all())));
   }
 
@@ -51,15 +51,15 @@ class ExecutorTest {
       initKVs.put(Integer.toString(i), (long) i);
     }
 
-    client.initKeyValues(initKVs);
+    executor.initKeyValues(initKVs);
     Pair<HashMap<String, Long>, Timestamp> result =
-            client.readKeys(new ArrayList<>(initKVs.keySet()), /*staleness=*/0,
+            executor.readKeys(new ArrayList<>(initKVs.keySet()), /*staleness=*/0,
             /*bounded=*/false);
     HashMap<String, Long> kvResult = result.getLeft();
     assertEquals(kvResult, initKVs);
   }
 
-  void checkSingleRecord(Struct row, String opType, String load, List<String> representation,
+  public void checkSingleRecord(Struct row, String opType, String load, List<String> representation,
                         long processID, Timestamp timestamp) {
     assertEquals(row.getString(Executor.OPTYPE_COLUMN_NAME), opType);
     assertEquals(row.getString(Executor.LOAD_COLUMN_NAME), load);
@@ -69,16 +69,16 @@ class ExecutorTest {
       assertEquals(row.getTimestamp(Executor.TIME_COLUMN_NAME), timestamp);
   }
 
-  void checkSingleRecord(Struct row, String opType, Timestamp timestamp) {
+  public void checkSingleRecord(Struct row, String opType, Timestamp timestamp) {
     checkSingleRecord(row, opType, LOAD_NAME, representation, PID, timestamp);
   }
 
-  void checkSingleRecord(Struct row, String opType) {
+  public void checkSingleRecord(Struct row, String opType) {
     checkSingleRecord(row, opType, /*timestamp-*/null);
   }
 
   ResultSet retrieveAllRecords() {
-    return client.getClient().singleUse().read(Executor.HISTORY_TABLE_NAME,
+    return executor.getClient().singleUse().read(Executor.HISTORY_TABLE_NAME,
             KeySet.all(),
             Arrays.asList(Executor.TIME_COLUMN_NAME, Executor.OPTYPE_COLUMN_NAME,
                     Executor.LOAD_COLUMN_NAME, Executor.VALUE_COLUMN_NAME,
@@ -87,9 +87,9 @@ class ExecutorTest {
 
   void checkFailOrInfo(String opType) {
     if (opType == Executor.FAIL)
-      client.recordFail(LOAD_NAME, representation);
+      executor.recordFail(LOAD_NAME, representation);
     else
-      client.recordInfo(LOAD_NAME, representation);
+      executor.recordInfo(LOAD_NAME, representation);
 
     try (ResultSet resultSet = retrieveAllRecords()) {
       while (resultSet.next()) {
@@ -101,8 +101,8 @@ class ExecutorTest {
   @Test
   void testRecordInvoke() {
     int staleness = 100000;
-    Timestamp staleRecordTimestamp = client.recordInvoke(LOAD_NAME, representation, staleness);
-    Timestamp recordTimestamp = client.recordInvoke(LOAD_NAME, representation);
+    Timestamp staleRecordTimestamp = executor.recordInvoke(LOAD_NAME, representation, staleness);
+    Timestamp recordTimestamp = executor.recordInvoke(LOAD_NAME, representation);
 
     try (ResultSet resultSet = retrieveAllRecords()) {
       List<Timestamp> timestamps = new ArrayList<>();
@@ -122,10 +122,10 @@ class ExecutorTest {
   void checkRecordCompleteWithStaleness(int staleness) {
     long commitTimestampInMilliseconds = 10000000;
     Timestamp invokeTimestamp = staleness == 0 ?
-            client.recordInvoke(LOAD_NAME, representation) :
-            client.recordInvoke(LOAD_NAME, representation, staleness);
+            executor.recordInvoke(LOAD_NAME, representation) :
+            executor.recordInvoke(LOAD_NAME, representation, staleness);
     Timestamp commitTimestamp = Timestamp.ofTimeMicroseconds(commitTimestampInMilliseconds);
-    client.recordComplete(LOAD_NAME, representation, commitTimestamp, invokeTimestamp);
+    executor.recordComplete(LOAD_NAME, representation, commitTimestamp, invokeTimestamp);
 
     try (ResultSet resultSet = retrieveAllRecords()) {
       resultSet.next();
@@ -161,23 +161,23 @@ class ExecutorTest {
     for (String key : representation) {
       kvs.put(key, Long.valueOf(key));
     }
-    client.initKeyValues(kvs);
+    executor.initKeyValues(kvs);
 
     // IDE suggest I could replace this with lambda, but I think this looks clearer?
-    client.runTxn(new Executor.TransactionFunction() {
+    executor.runTxn(new Executor.TransactionFunction() {
       @Override
       public void run() {
         for (String key : representation) {
-          long value = client.executeTransactionalRead(key);
+          long value = executor.executeTransactionalRead(key);
           assertEquals(value, Long.valueOf(key).longValue());
-          client.executeTransactionalWrite(key, value * value);
-          long valueSquared = client.executeTransactionalRead(key);
+          executor.executeTransactionalWrite(key, value * value);
+          long valueSquared = executor.executeTransactionalRead(key);
           assertEquals(valueSquared, value * value);
         }
       }
     });
 
-    HashMap<String, Long> result = client.readKeys(representation, 0, false).getLeft();
+    HashMap<String, Long> result = executor.readKeys(representation, 0, false).getLeft();
     for (Map.Entry<String, Long> kv : result.entrySet()) {
       long keyAsLong = Long.parseLong(kv.getKey());
       assertEquals(kv.getValue().longValue(), keyAsLong * keyAsLong);
@@ -190,14 +190,14 @@ class ExecutorTest {
     for (String key : representation) {
       kvs.put(key, Long.valueOf(key));
     }
-    client.initKeyValues(kvs);
+    executor.initKeyValues(kvs);
 
     try {
-      client.runTxn(new Executor.TransactionFunction() {
+      executor.runTxn(new Executor.TransactionFunction() {
         @Override
         public void run() {
           for (String key : representation) {
-            client.executeTransactionalWrite(key, -1);
+            executor.executeTransactionalWrite(key, -1);
             if (Integer.parseInt(key) > 8)
               throw new RuntimeException("Testing");
           }
@@ -205,7 +205,7 @@ class ExecutorTest {
       });
     } catch (SpannerException e) {
       if (e.getErrorCode() == ErrorCode.UNKNOWN) {
-        HashMap<String, Long> result = client.readKeys(representation, 0, false).getLeft();
+        HashMap<String, Long> result = executor.readKeys(representation, 0, false).getLeft();
         assertEquals(result, kvs);
       } else {
         throw e.getCause();

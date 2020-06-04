@@ -17,7 +17,6 @@ import com.google.cloud.spanner.SpannerException;
 import com.google.cloud.spanner.SpannerExceptionFactory;
 import com.google.cloud.spanner.SpannerOptions;
 import com.google.cloud.spanner.Statement;
-import com.google.cloud.spanner.Struct;
 import com.google.cloud.spanner.TimestampBound;
 import com.google.cloud.spanner.TransactionContext;
 import com.google.cloud.spanner.TransactionRunner;
@@ -35,35 +34,38 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
-import java.util.function.Consumer;
 
+/**
+ * Executor class encapsulates the details of a maintaining a client and facilitating its
+ * communication with the Spanner instance. It provides interfaces for the operations /
+ * transactions to execute read / writes, read a list of keys and recording various history logs.
+ */
 public class Executor {
 
-  private DatabaseClient client;
-  private DatabaseAdminClient adminClient;
-  private DatabaseId databaseId;
-  private int processID;
-  private TransactionContext currentActiveTransaction;
+  private DatabaseClient client; // maintain connection with the Spanner instance
+  private int processID; // each executor will be assigned a unique ID
+  private TransactionContext currentActiveTransaction; // This will be initialized only when
+  // running transactions; see executeTransactionalRead/Write for more details
 
-  static final String TESTING_TABLE_NAME = "Testing";
-  static final String HISTORY_TABLE_NAME = "History";
-  static final String KEY_COLUMN_NAME = "Key";
-  static final String VALUE_COLUMN_NAME = "Value";
-  static final String OPTYPE_COLUMN_NAME = "OpType";
-  static final String TIME_COLUMN_NAME = "Time";
-  static final String PID_COLUMN_NAME = "ProcessID";
-  static final String LOAD_COLUMN_NAME = "Load";
-  static final String INVOKE = "invoke";
-  static final String OK = "ok";
-  static final String FAIL = "fail";
-  static final String INFO = "info";
+  public static final String TESTING_TABLE_NAME = "Testing";
+  public static final String HISTORY_TABLE_NAME = "History";
+  public static final String KEY_COLUMN_NAME = "Key";
+  public static final String VALUE_COLUMN_NAME = "Value";
+  public static final String OPTYPE_COLUMN_NAME = "OpType";
+  public static final String TIME_COLUMN_NAME = "Time";
+  public static final String PID_COLUMN_NAME = "ProcessID";
+  public static final String LOAD_COLUMN_NAME = "Load";
+  public static final String INVOKE = "invoke";
+  public static final String OK = "ok";
+  public static final String FAIL = "fail";
+  public static final String INFO = "info";
 
-  private static final Type Record = Type.struct(Arrays.asList(
-          Type.StructField.of(OPTYPE_COLUMN_NAME, Type.bool()),
-          Type.StructField.of(KEY_COLUMN_NAME, Type.string()),
-          Type.StructField.of(VALUE_COLUMN_NAME, Type.int64())
-  ));
-
+  /**
+   * Functional interface that will be implemented by user of Executor.runTxn. This function will
+   * be run inside a readWriteTransaction. An alternative would be to use the Java native
+   * Runnable interface, but considering that will create confusion as it is usually associated
+   * with Thread, we create one that is unique to the Executor class.
+   */
   public interface TransactionFunction {
     void run();
   }
@@ -71,33 +73,35 @@ public class Executor {
   public Executor(String instanceId, String dbId, int processID) {
     SpannerOptions options = SpannerOptions.newBuilder().build();
     Spanner spanner = options.getService();
-    this.databaseId = DatabaseId.of(options.getProjectId(), instanceId, dbId);
+    DatabaseId databaseId = DatabaseId.of(options.getProjectId(), instanceId, dbId);
     this.client = spanner.getDatabaseClient(databaseId);
-    this.adminClient = spanner.getDatabaseAdminClient();
+    DatabaseAdminClient adminClient = spanner.getDatabaseAdminClient();
     this.processID = processID;
 
     // create the initial tables for history
     OperationFuture<Database, CreateDatabaseMetadata> op =
             adminClient.createDatabase(instanceId, dbId, Arrays.asList(
                     "CREATE TABLE " + HISTORY_TABLE_NAME + " (\n" +
-                            "    Time       TIMESTAMP NOT NULL\n" +
+                            "    " + TIME_COLUMN_NAME + "   TIMESTAMP NOT NULL\n" +
                             "    OPTIONS (allow_commit_timestamp = true),\n" +
-                            "    OpType     STRING(6) NOT NULL,\n" +
-                            "    Load   STRING(MAX) NOT NULL,\n" +
-                            "    Value      ARRAY<STRING(MAX)>,\n" +
-                            "    ProcessID  INT64 NOT NULL,\n" +
-                            ") PRIMARY KEY(Time, ProcessID, OpType, Load)",
+                            "    " + OPTYPE_COLUMN_NAME + " STRING(6) NOT NULL,\n" +
+                            "    " + LOAD_COLUMN_NAME + "   STRING(MAX) NOT NULL,\n" +
+                            "    " + VALUE_COLUMN_NAME + "  ARRAY<STRING(MAX)>,\n" +
+                            "    " + PID_COLUMN_NAME + "    INT64 NOT NULL,\n" +
+                            ") PRIMARY KEY(" + TIME_COLUMN_NAME + ", " + PID_COLUMN_NAME + ", " +
+                            OPTYPE_COLUMN_NAME + ", " + LOAD_COLUMN_NAME + ")",
                     "CREATE TABLE " + TESTING_TABLE_NAME + " (\n" +
-                            "    Key   STRING(MAX) NOT NULL,\n" +
-                            "    Value INT64 NOT NULL,\n" +
-                            ") PRIMARY KEY(Key)\n"));
+                            "    " + KEY_COLUMN_NAME + "   STRING(MAX) NOT NULL,\n" +
+                            "    " + VALUE_COLUMN_NAME + " INT64 NOT NULL,\n" +
+                            ") PRIMARY KEY(" + KEY_COLUMN_NAME + ")\n"));
 
     try {
-      Database db = op.get();
+      op.get();
     } catch (ExecutionException e) {
-      // If the operation failed during execution, expose the cause.
       SpannerException se = (SpannerException) e.getCause();
+      // If error code is ALREADY_EXISTS, other executors have created the initial tables already
       if (se.getErrorCode() != ErrorCode.ALREADY_EXISTS) {
+        // otherwise throw error
         throw se;
       }
     } catch (InterruptedException e) {
@@ -105,6 +109,15 @@ public class Executor {
     }
   }
 
+  /**
+   * Given a list of string as keys, return a pair where the first element is the key-value
+   * mapping read and the second element is the read timestamp. The staleness and bounded
+   * parameters are used to achieve Exact Stale reads and Bounded Stale reads.
+   * @param keys
+   * @param staleness
+   * @param bounded
+   * @throws SpannerException
+   */
   public Pair<HashMap<String, Long>, Timestamp> readKeys(List<String> keys, int staleness,
                                                    boolean bounded) throws SpannerException {
     HashMap<String, Long> result = new HashMap<>();
@@ -128,24 +141,38 @@ public class Executor {
     return Pair.of(result, readTimeStamp);
   }
 
+  /**
+   * Given a function of how to run the transaction, run the transaction.
+   * Returns the commit timestamp of the transaction.
+   * @param transactionToRun
+   */
   public Timestamp runTxn(TransactionFunction transactionToRun) {
     TransactionRunner transactionRunner = client.readWriteTransaction();
     transactionRunner.run(new TransactionRunner.TransactionCallable<Void>() {
       @Nullable
       @Override
       public Void run(TransactionContext transaction) throws Exception {
+        // only when a transaction is active will the variable be non-null
         currentActiveTransaction = transaction;
         transactionToRun.run();
-        currentActiveTransaction = null;
+        currentActiveTransaction = null; // reset back to null
         return null;
       }
     });
     return transactionRunner.getCommitTimestamp();
   }
 
+  /**
+   * Given a key, returns the result of a transactional read. This method must be used only within
+   * the user-defined transaction function.
+   * @param key
+   */
   public long executeTransactionalRead(String key) throws RuntimeException {
     if (currentActiveTransaction == null)
       throw new RuntimeException("This method should be used in a ReadWriteTransaction");
+
+    // Using SQL interface so that all previous writes will be reflected in subsequent reads in
+    // the same transaction; this is not the case for Mutation interface
     try (ResultSet resultSet = currentActiveTransaction.executeQuery(
             Statement.of(String.format("SELECT %s FROM %s WHERE %s = \"%s\"", VALUE_COLUMN_NAME,
                     TESTING_TABLE_NAME, KEY_COLUMN_NAME, key)))) {
@@ -154,6 +181,12 @@ public class Executor {
     }
   }
 
+  /**
+   * Given a key and a value, write the key-value pair into the database. See above
+   * executeTransactionalRead
+   * @param key
+   * @param value
+   */
   public void executeTransactionalWrite(String key, long value) {
     if (currentActiveTransaction == null)
       throw new RuntimeException("This method should be used in a ReadWriteTransaction");
@@ -162,14 +195,35 @@ public class Executor {
                     TESTING_TABLE_NAME, VALUE_COLUMN_NAME, value, KEY_COLUMN_NAME, key)));
   }
 
+  /**
+   * Given a load name, a load value representation and staleness, record the invoke history in
+   * the history table. Returns the commit timestamp of this record.
+   * @param loadName
+   * @param representation
+   * @param staleness
+   */
   public Timestamp recordInvoke(String loadName, List<String> representation, int staleness) {
     return recordList(loadName, representation, INVOKE, staleness);
   }
 
+  /**
+   * Overloaded recordInvoke for non-stale operations / transactions.
+   * @param loadName
+   * @param representation
+   * @return
+   */
   public Timestamp recordInvoke(String loadName, List<String> representation) {
     return recordInvoke(loadName, representation, /*staleness=*/0);
   }
 
+  /**
+   * Given a load name, a load value representation, a commit timestamp and an invoke timestamp,
+   * record the "ok" history and update the timestamp of "invoke" history.
+   * @param loadName
+   * @param recordRepresentation
+   * @param commitTimestamp
+   * @param invokeTimestamp
+   */
   public void recordComplete(String loadName, List<String> recordRepresentation,
                              Timestamp commitTimestamp, Timestamp invokeTimestamp) {
     try {
@@ -181,7 +235,7 @@ public class Executor {
                       .set(VALUE_COLUMN_NAME).toStringArray(recordRepresentation)
                       .set(PID_COLUMN_NAME).to(processID).build(),
               Mutation.delete(HISTORY_TABLE_NAME, Key.of(invokeTimestamp, processID, INVOKE,
-                      loadName)),
+                      loadName)), // delete the old invoke record first, since key cannot be updated
               Mutation.newInsertBuilder(HISTORY_TABLE_NAME)
                       .set(TIME_COLUMN_NAME).to(commitTimestamp)
                       .set(OPTYPE_COLUMN_NAME).to(INVOKE)
@@ -193,10 +247,20 @@ public class Executor {
     }
   }
 
+  /**
+   * Record a fail history.
+   * @param loadName
+   * @param representation
+   */
   public void recordFail(String loadName, List<String> representation) {
     recordList(loadName, representation, FAIL, /*staleness=*/0);
   }
 
+  /**
+   * Record an info history.
+   * @param loadName
+   * @param representation
+   */
   public void recordInfo(String loadName, List<String> representation) {
     recordList(loadName, representation, INFO, /*staleness=*/0);
   }
@@ -212,6 +276,8 @@ public class Executor {
                   .set(VALUE_COLUMN_NAME).toStringArray(representation)
                   .set(PID_COLUMN_NAME).to(processID).build()));
       if (staleness != 0) {
+        // If this is a stale read, we need to go back and subtract that staleness from the
+        // commit timestamp
         Timestamp staleTimestamp =
                 Timestamp.ofTimeMicroseconds((commitTimestamp.toSqlTimestamp().getTime() - staleness) * 1000);
         client.write(Arrays.asList(
@@ -234,6 +300,11 @@ public class Executor {
     }
   }
 
+  /**
+   * Given a key-vale mapping, insert it into the database. This function is intended to be used
+   * in initialization.
+   * @param initialKVs
+   */
   public void initKeyValues(HashMap<String, Long> initialKVs) {
     List<Mutation> mutations = new ArrayList<>();
     for (Map.Entry<String, Long> kv : initialKVs.entrySet()) {
@@ -249,5 +320,6 @@ public class Executor {
     }
   }
 
-  DatabaseClient getClient() { return client; }
+  /** For testing; returns the client under the hood. */
+  public DatabaseClient getClient() { return client; }
 }

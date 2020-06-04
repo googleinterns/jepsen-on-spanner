@@ -7,6 +7,11 @@ import com.google.jepsenonspanner.client.Executor;
 
 import java.util.List;
 
+/**
+ * ReadWriteTransaction class encapsulates a series of read and write transactions that may or
+ * may not be dependent. The intention is that this class will have as little dependency with the
+ * Spanner instance as possible, since that part should be encapsulated in the Executor class.
+ */
 public class ReadWriteTransaction extends OperationList {
 
   private List<TransactionalOperation> ops;
@@ -18,37 +23,39 @@ public class ReadWriteTransaction extends OperationList {
   }
 
   @Override
-  public void executeOps(Executor client) {
+  public void executeOps(Executor executor) {
     try {
-      Timestamp recordTimestamp = client.recordInvoke(getLoadName(), getRecordRepresentation());
-      Timestamp commitTimestamp = client.runTxn(new Executor.TransactionFunction() {
+      Timestamp recordTimestamp = executor.recordInvoke(getLoadName(), getRecordRepresentation());
+      Timestamp commitTimestamp = executor.runTxn(new Executor.TransactionFunction() {
         @Override
         public void run() {
           for (TransactionalOperation op : ops) {
             long dependentValue = -1;
 
+            // Iterate through all dependent operations and execute them first
             for (; op != null; op = op.getDependentOp()) {
               if (!op.decideProceed(dependentValue)) {
                 throw new RuntimeException("Unable to proceed");
-                // TODO: confirm that exception rolls back all the values
                 // abort the whole transaction if anything is determined as unable to proceed
+                // This will force Spanner to throw a ErrorCode.UNKNOWN exception
               }
               op.findDependentValue(dependentValue);
               if (op.isRead()) {
-                dependentValue = client.executeTransactionalRead(op.getKey());
+                dependentValue = executor.executeTransactionalRead(op.getKey());
               } else {
-                client.executeTransactionalWrite(op.getKey(), op.getValue());
+                executor.executeTransactionalWrite(op.getKey(), op.getValue());
               }
             }
           }
         }
       });
-      client.recordComplete(getLoadName(), getRecordRepresentation(), commitTimestamp, recordTimestamp);
+      executor.recordComplete(getLoadName(), getRecordRepresentation(), commitTimestamp, recordTimestamp);
     } catch (SpannerException e) {
       if (e.getErrorCode() == ErrorCode.UNKNOWN) {
-        client.recordFail(getLoadName(), getRecordRepresentation());
+        // The transaction function has thrown an error, meaning that the transaction fails
+        executor.recordFail(getLoadName(), getRecordRepresentation());
       } else {
-        client.recordInfo(getLoadName(), getRecordRepresentation());
+        executor.recordInfo(getLoadName(), getRecordRepresentation());
       }
     }
 

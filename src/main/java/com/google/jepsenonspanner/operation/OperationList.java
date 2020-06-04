@@ -4,7 +4,13 @@ import com.google.jepsenonspanner.client.Executor;
 
 import java.util.List;
 
+/**
+ * An OperationList encapsulates a unit of load that should be executed atomically by the
+ * executor. The user will supply a load name and a representation to be recorded in the history
+ * table; they will then be interpreted by the verifier.
+ */
 public abstract class OperationList {
+
   private String loadName;
   private List<String> recordRepresentation;
 

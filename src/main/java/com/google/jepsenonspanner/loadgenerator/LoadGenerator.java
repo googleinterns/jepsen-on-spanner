@@ -18,6 +18,9 @@ public abstract class LoadGenerator {
     this.opLimit = opLimit;
   }
 
+  /**
+   * Initialize any key-value pairs in the database as necessary
+   */
   public void initKVs(HashMap<String, Long> initialData, Executor executor) {
     executor.initKeyValues(initialData);
   }

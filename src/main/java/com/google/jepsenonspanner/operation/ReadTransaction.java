@@ -10,6 +10,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * ReadTransaction class encapsulates a readonly transaction that can have a certain staleness,
+ * whether bounded or exact.
+ */
 public class ReadTransaction extends OperationList {
 
   private List<String> keys;
@@ -24,37 +28,47 @@ public class ReadTransaction extends OperationList {
     this.bounded = bounded;
   }
 
+  /**
+   * Creates a strong read. Note that the representation is initialized as teh same as the keys.
+   * This is because there will be no values read initially, so only keys are present in the
+   * representations in the history table; they will be updated once the read returns.
+   * @param loadName
+   * @param keys
+   * @return
+   */
   public static ReadTransaction createStrongRead(String loadName, List<String> keys) {
-    return new ReadTransaction(loadName, null, keys, /*staleness=*/0, /*bounded
+    return new ReadTransaction(loadName, keys, keys, /*staleness=*/0, /*bounded
     =*/false);
   }
 
   public static ReadTransaction createBoundedStaleRead(String loadName, List<String> keys,
                                                        int staleness) {
-    return new ReadTransaction(loadName, null, keys, staleness, /*bounded=*/true);
+    return new ReadTransaction(loadName, keys, keys, staleness, /*bounded=*/true);
   }
 
   public static ReadTransaction createExactStaleRead(String loadName, List<String> keys,
                                                      int staleness) {
-    return new ReadTransaction(loadName, null, keys, staleness, /*bounded=*/false);
+    return new ReadTransaction(loadName, keys, keys, staleness, /*bounded=*/false);
   }
 
   @Override
-  public void executeOps(Executor client) {
+  public void executeOps(Executor executor) {
     try {
-      Timestamp recordTimestamp = client.recordInvoke(getLoadName(), getRecordRepresentation(),
+      Timestamp recordTimestamp = executor.recordInvoke(getLoadName(), getRecordRepresentation(),
               staleness);
-      Pair<HashMap<String, Long>, Timestamp> result = client.readKeys(keys, staleness, bounded);
+      Pair<HashMap<String, Long>, Timestamp> result = executor.readKeys(keys, staleness, bounded);
       HashMap<String, Long> keyValues = result.getLeft();
       Timestamp readTimeStamp = result.getRight();
+
+      // Update the representation to reflect the values read
       List<String> recordRepresentation = new ArrayList<>();
       for (Map.Entry<String, Long> kv : keyValues.entrySet()) {
         recordRepresentation.add(String.format("%s %d", kv.getKey(), kv.getValue()));
       }
-      client.recordComplete(getLoadName(), recordRepresentation, readTimeStamp, recordTimestamp);
+      executor.recordComplete(getLoadName(), recordRepresentation, readTimeStamp, recordTimestamp);
     } catch (SpannerException e) {
       // TODO: figure out how to differentiate between fail and info
-      client.recordFail(getLoadName(), getRecordRepresentation());
+      executor.recordFail(getLoadName(), getRecordRepresentation());
     }
   }
 }
