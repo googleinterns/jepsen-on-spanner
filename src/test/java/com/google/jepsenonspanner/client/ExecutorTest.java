@@ -7,6 +7,7 @@ import com.google.cloud.spanner.Mutation;
 import com.google.cloud.spanner.ResultSet;
 import com.google.cloud.spanner.SpannerException;
 import com.google.cloud.spanner.Struct;
+import com.google.cloud.spanner.TransactionContext;
 import org.apache.commons.lang3.tuple.Pair;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -166,12 +167,12 @@ class ExecutorTest {
     // IDE suggest I could replace this with lambda, but I think this looks clearer?
     executor.runTxn(new Executor.TransactionFunction() {
       @Override
-      public void run() {
+      public void run(TransactionContext transaction) {
         for (String key : representation) {
-          long value = executor.executeTransactionalRead(key);
+          long value = executor.executeTransactionalRead(key, transaction);
           assertEquals(value, Long.valueOf(key).longValue());
-          executor.executeTransactionalWrite(key, value * value);
-          long valueSquared = executor.executeTransactionalRead(key);
+          executor.executeTransactionalWrite(key, value * value, transaction);
+          long valueSquared = executor.executeTransactionalRead(key, transaction);
           assertEquals(valueSquared, value * value);
         }
       }
@@ -195,9 +196,9 @@ class ExecutorTest {
     try {
       executor.runTxn(new Executor.TransactionFunction() {
         @Override
-        public void run() {
+        public void run(TransactionContext transaction) {
           for (String key : representation) {
-            executor.executeTransactionalWrite(key, -1);
+            executor.executeTransactionalWrite(key, -1, transaction);
             if (Integer.parseInt(key) > 8)
               throw new RuntimeException("Testing");
           }

@@ -51,10 +51,11 @@ import java.util.stream.Collectors;
  */
 public class Executor {
 
-  private DatabaseClient client; // maintain connection with the Spanner instance
-  private int processID; // each executor will be assigned a unique ID
-  private TransactionContext currentActiveTransaction; // This will be initialized only when
-  // running transactions; see executeTransactionalRead/Write for more details
+  // maintain connection with the Spanner instance
+  private DatabaseClient client;
+
+  // each executor will be assigned a unique ID
+  private int processID;
 
   public static final String TESTING_TABLE_NAME = "Testing";
   public static final String HISTORY_TABLE_NAME = "History";
@@ -78,7 +79,7 @@ public class Executor {
    * with Thread, we create one that is unique to the Executor class.
    */
   public interface TransactionFunction {
-    void run();
+    void run(TransactionContext transaction);
   }
 
   public Executor(String instanceId, String dbId, int processID) {
@@ -121,7 +122,7 @@ public class Executor {
   }
 
   /**
-   * Given a list of string as keys, return a pair where the first element is the key-value
+   * Given a list of string as keys, returns a pair where the first element is the key-value
    * mapping read and the second element is the read timestamp. The staleness and bounded
    * parameters are used to achieve Exact Stale reads and Bounded Stale reads.
    * @param keys
@@ -137,23 +138,27 @@ public class Executor {
       keySetBuilder.addKey(Key.of(key));
     }
 
-    Timestamp readTimeStamp;
-    try (ReadOnlyTransaction txn = staleness == 0 ?
-            client.singleUseReadOnlyTransaction() : client.singleUseReadOnlyTransaction(bounded ?
-            TimestampBound.ofMaxStaleness(staleness, TimeUnit.MILLISECONDS) :
-            TimestampBound.ofExactStaleness(staleness, TimeUnit.MILLISECONDS))) {
-      ResultSet resultSet = txn.read(TESTING_TABLE_NAME, keySetBuilder.build(),
-              Arrays.asList(KEY_COLUMN_NAME, VALUE_COLUMN_NAME));
+    ReadOnlyTransaction txn;
+    if (staleness == 0) {
+      txn = client.singleUseReadOnlyTransaction();
+    } else if (bounded) {
+      txn = client.singleUseReadOnlyTransaction(TimestampBound.ofMaxStaleness(staleness,
+              TimeUnit.MILLISECONDS));
+    } else {
+      txn = client.singleUseReadOnlyTransaction(TimestampBound.ofExactStaleness(staleness,
+              TimeUnit.MILLISECONDS));
+    }
+    try (ResultSet resultSet = txn.read(TESTING_TABLE_NAME, keySetBuilder.build(),
+            Arrays.asList(KEY_COLUMN_NAME, VALUE_COLUMN_NAME))) {
       while (resultSet.next()) {
         result.put(resultSet.getString(KEY_COLUMN_NAME), resultSet.getLong(VALUE_COLUMN_NAME));
       }
-      readTimeStamp = txn.getReadTimestamp();
     }
-    return Pair.of(result, readTimeStamp);
+    return Pair.of(result, txn.getReadTimestamp());
   }
 
   /**
-   * Given a function of how to run the transaction, run the transaction.
+   * Runs the given transactionToRun within a transaction.
    * Returns the commit timestamp of the transaction.
    * @param transactionToRun
    */
@@ -163,10 +168,7 @@ public class Executor {
       @Nullable
       @Override
       public Void run(TransactionContext transaction) throws Exception {
-        // only when a transaction is active will the variable be non-null
-        currentActiveTransaction = transaction;
-        transactionToRun.run();
-        currentActiveTransaction = null; // reset back to null
+        transactionToRun.run(transaction);
         return null;
       }
     });
@@ -178,13 +180,10 @@ public class Executor {
    * the user-defined transaction function.
    * @param key
    */
-  public long executeTransactionalRead(String key) throws RuntimeException {
-    if (currentActiveTransaction == null)
-      throw new RuntimeException("This method should be used in a ReadWriteTransaction");
-
+  public long executeTransactionalRead(String key, TransactionContext transaction) throws RuntimeException {
     // Using SQL interface so that all previous writes will be reflected in subsequent reads in
     // the same transaction; this is not the case for Mutation interface
-    try (ResultSet resultSet = currentActiveTransaction.executeQuery(
+    try (ResultSet resultSet = transaction.executeQuery(
             Statement.of(String.format("SELECT %s FROM %s WHERE %s = \"%s\"", VALUE_COLUMN_NAME,
                     TESTING_TABLE_NAME, KEY_COLUMN_NAME, key)))) {
       resultSet.next();
@@ -198,17 +197,16 @@ public class Executor {
    * @param key
    * @param value
    */
-  public void executeTransactionalWrite(String key, long value) {
-    if (currentActiveTransaction == null)
-      throw new RuntimeException("This method should be used in a ReadWriteTransaction");
-    currentActiveTransaction.executeUpdate(
+  public void executeTransactionalWrite(String key, long value, TransactionContext transaction) {
+    transaction.executeUpdate(
             Statement.of(String.format("UPDATE %s SET %s = %s WHERE %s = \"%s\"",
                     TESTING_TABLE_NAME, VALUE_COLUMN_NAME, value, KEY_COLUMN_NAME, key)));
   }
 
   /**
-   * Given a load name, a load value representation and staleness, record the invoke history in
-   * the history table. Returns the commit timestamp of this record.
+   * Records an "invoke" history [loadName, representation, staleness] into the history table. If
+   * the record is stale, return its stale read timestamp; otherwise returns the commit timestamp
+   * of this record.
    * @param loadName
    * @param representation
    * @param staleness
@@ -219,9 +217,9 @@ public class Executor {
 
   /**
    * Overloaded recordInvoke for non-stale operations / transactions.
+   * Returns the commit timestamp of this record.
    * @param loadName
    * @param representation
-   * @return
    */
   public Timestamp recordInvoke(String loadName, List<String> representation) {
     return recordInvoke(loadName, representation, /*staleness=*/0);
@@ -259,7 +257,7 @@ public class Executor {
   }
 
   /**
-   * Record a fail history.
+   * Records a fail history.
    * @param loadName
    * @param representation
    */
@@ -268,7 +266,7 @@ public class Executor {
   }
 
   /**
-   * Record an info history.
+   * Records an info history.
    * @param loadName
    * @param representation
    */
@@ -276,6 +274,17 @@ public class Executor {
     recordList(loadName, representation, INFO, /*staleness=*/0);
   }
 
+
+  /**
+   * Helper function that inserts a history [loadName, representation, staleness] into the
+   * history table with the given opType (can be one of "invoke", "ok", "fail" or "info").
+   * Optional staleness will subtract staleness amount of milliseconds from the commit timestamp.
+   * @param loadName
+   * @param representation
+   * @param opType
+   * @param staleness
+   * @throws RuntimeException
+   */
   private Timestamp recordList(String loadName, List<String> representation, String opType,
                           int staleness) throws RuntimeException {
     try {
@@ -331,6 +340,11 @@ public class Executor {
     }
   }
 
+  /**
+   * Converts a row of History table into a Map that will be written into the edn file.
+   * @param row
+   * @return
+   */
   private Map<Keyword, Object> convertToMap(Struct row) {
     Map<Keyword, Object> record = new HashMap<>();
     record.put(Keyword.newKeyword("type"), Keyword.newKeyword(row.getString(OPTYPE_COLUMN_NAME)));
@@ -342,6 +356,9 @@ public class Executor {
     return record;
   }
 
+  /**
+   * Extracts all history records and save it on a local edn file.
+   */
   public void extractHistory() {
     try (ResultSet resultSet = client.singleUse().read(HISTORY_TABLE_NAME, KeySet.all(),
             Arrays.asList(OPTYPE_COLUMN_NAME, LOAD_COLUMN_NAME, VALUE_COLUMN_NAME,

@@ -3,6 +3,7 @@ package com.google.jepsenonspanner.operation;
 import com.google.cloud.Timestamp;
 import com.google.cloud.spanner.ErrorCode;
 import com.google.cloud.spanner.SpannerException;
+import com.google.cloud.spanner.TransactionContext;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.jepsenonspanner.client.Executor;
 
@@ -32,7 +33,7 @@ public class ReadWriteTransaction extends OperationList {
         Timestamp recordTimestamp = executor.recordInvoke(getLoadName(), getRecordRepresentation());
         Timestamp commitTimestamp = executor.runTxn(new Executor.TransactionFunction() {
           @Override
-          public void run() {
+          public void run(TransactionContext transaction) {
             for (TransactionalOperation op : ops) {
               long dependentValue = -1;
 
@@ -45,9 +46,9 @@ public class ReadWriteTransaction extends OperationList {
                 }
                 op.findDependentValue(dependentValue);
                 if (op.isRead()) {
-                  dependentValue = executor.executeTransactionalRead(op.getKey());
+                  dependentValue = executor.executeTransactionalRead(op.getKey(), transaction);
                 } else {
-                  executor.executeTransactionalWrite(op.getKey(), op.getValue());
+                  executor.executeTransactionalWrite(op.getKey(), op.getValue(), transaction);
                 }
               }
             }
