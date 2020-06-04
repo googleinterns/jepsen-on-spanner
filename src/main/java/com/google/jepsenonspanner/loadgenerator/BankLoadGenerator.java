@@ -35,6 +35,8 @@ public class BankLoadGenerator extends LoadGenerator {
     }
 
     public Config(int strongRead, int boundedStaleRead, int exactStaleRead, int transfer) {
+      if (strongRead + boundedStaleRead + exactStaleRead + transfer == 0)
+        throw new RuntimeException("Invalid config");
       this.strongRead = strongRead;
       this.boundedStaleRead = boundedStaleRead;
       this.exactStaleRead = exactStaleRead;
@@ -112,6 +114,16 @@ public class BankLoadGenerator extends LoadGenerator {
   public BankLoadGenerator(int opLimit, int maxBalance, int acctNumber) {
     this(opLimit, maxBalance, acctNumber, /*config=*/new Config(/*strongRead=*/2, /*boundedStaleRead
     =*/1, /*exactStaleRead=*/1, /*transfer=*/2));
+  }
+
+  /**
+   * Constructor with a default distribution of 2:1:1:2 and a supplied seed
+   *
+   * @see BankLoadGenerator#BankLoadGenerator(int, int, int, Config)
+   */
+  public BankLoadGenerator(int opLimit, int maxBalance, int acctNumber, int randSeed) {
+    this(opLimit, maxBalance, acctNumber, /*config=*/new Config(/*strongRead=*/2, /*boundedStaleRead
+    =*/1, /*exactStaleRead=*/1, /*transfer=*/2), randSeed);
   }
 
   @Override
