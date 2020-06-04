@@ -17,15 +17,23 @@ import com.google.cloud.spanner.SpannerException;
 import com.google.cloud.spanner.SpannerExceptionFactory;
 import com.google.cloud.spanner.SpannerOptions;
 import com.google.cloud.spanner.Statement;
+import com.google.cloud.spanner.Struct;
 import com.google.cloud.spanner.TimestampBound;
 import com.google.cloud.spanner.TransactionContext;
 import com.google.cloud.spanner.TransactionRunner;
 import com.google.cloud.spanner.Type;
 import com.google.cloud.spanner.Value;
+import com.google.common.annotations.VisibleForTesting;
 import com.google.spanner.admin.database.v1.CreateDatabaseMetadata;
 import org.apache.commons.lang3.tuple.Pair;
+import us.bpsm.edn.Keyword;
+import us.bpsm.edn.Named;
+import us.bpsm.edn.Symbol;
+import us.bpsm.edn.printer.Printers;
 
 import javax.annotation.Nullable;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -34,6 +42,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 /**
  * Executor class encapsulates the details of a maintaining a client and facilitating its
@@ -59,6 +68,8 @@ public class Executor {
   public static final String OK = "ok";
   public static final String FAIL = "fail";
   public static final String INFO = "info";
+  public static final String RECORD_FILENAME = "history.edn";
+  public static final String RECORDER_ERROR = "RECORDER ERROR";
 
   /**
    * Functional interface that will be implemented by user of Executor.runTxn. This function will
@@ -243,7 +254,7 @@ public class Executor {
                       .set(VALUE_COLUMN_NAME).toStringArray(recordRepresentation)
                       .set(PID_COLUMN_NAME).to(processID).build()));
     } catch (SpannerException e) {
-      throw new RuntimeException("RECORDER ERROR");
+      throw new RuntimeException(RECORDER_ERROR);
     }
   }
 
@@ -296,7 +307,7 @@ public class Executor {
       System.out.println(staleness);
       System.out.println(e.getCause());
       e.printStackTrace();
-      throw new RuntimeException("RECORDER ERROR");
+      throw new RuntimeException(RECORDER_ERROR);
     }
   }
 
@@ -316,10 +327,38 @@ public class Executor {
       client.write(mutations);
     } catch (SpannerException e) {
       System.out.println(e.getMessage());
-      throw new RuntimeException("RECORDER ERROR");
+      throw new RuntimeException(RECORDER_ERROR);
+    }
+  }
+
+  private Map<Keyword, Object> convertToMap(Struct row) {
+    Map<Keyword, Object> record = new HashMap<>();
+    record.put(Keyword.newKeyword("type"), Keyword.newKeyword(row.getString(OPTYPE_COLUMN_NAME)));
+    record.put(Keyword.newKeyword("f"), Keyword.newKeyword(row.getString(LOAD_COLUMN_NAME)));
+    List<String> representation = row.getStringList(VALUE_COLUMN_NAME);
+    String repr = Printers.printString(Printers.defaultPrinterProtocol(), representation);
+    record.put(Keyword.newKeyword("value"), representation);
+    record.put(Keyword.newKeyword("process"), processID);
+    return record;
+  }
+
+  public void extractHistory() {
+    try (ResultSet resultSet = client.singleUse().read(HISTORY_TABLE_NAME, KeySet.all(),
+            Arrays.asList(OPTYPE_COLUMN_NAME, LOAD_COLUMN_NAME, VALUE_COLUMN_NAME,
+                    PID_COLUMN_NAME));
+         FileWriter recordWriter = new FileWriter(RECORD_FILENAME)) {
+      List<Map<Keyword, Object>> records = new ArrayList<>();
+      while (resultSet.next()) {
+        Map<Keyword, Object> record = convertToMap(resultSet.getCurrentRowAsStruct());
+        records.add(record);
+      }
+      recordWriter.write(Printers.printString(Printers.prettyPrinterProtocol(), records));
+    } catch (IOException e) {
+      throw new RuntimeException(RECORDER_ERROR);
     }
   }
 
   /** For testing; returns the client under the hood. */
+  @VisibleForTesting
   public DatabaseClient getClient() { return client; }
 }

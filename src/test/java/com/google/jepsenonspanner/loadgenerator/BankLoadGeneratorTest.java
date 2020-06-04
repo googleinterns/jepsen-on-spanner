@@ -130,6 +130,7 @@ class BankLoadGeneratorTest {
       assertTrue(generators.get(0).hasLoad());
       OperationList op = generators.get(0).nextOperation();
 
+      // All operations generated should be the same within this iteration
       for (int j = 1; j < generators.size(); j++) {
         OperationList newOp = generators.get(j).nextOperation();
         assertEquals(newOp, op);

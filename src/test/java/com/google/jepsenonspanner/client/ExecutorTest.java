@@ -212,4 +212,11 @@ class ExecutorTest {
       }
     }
   }
+
+  @Test
+  void testExtractHistory() {
+    Timestamp timestamp = executor.recordInvoke(LOAD_NAME, representation);
+    executor.recordComplete(LOAD_NAME, representation, Timestamp.ofTimeMicroseconds(100000), timestamp);
+    executor.extractHistory();
+  }
 }
