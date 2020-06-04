@@ -23,7 +23,6 @@ import com.google.cloud.spanner.TransactionContext;
 import com.google.cloud.spanner.TransactionRunner;
 import com.google.cloud.spanner.Type;
 import com.google.cloud.spanner.Value;
-import com.google.jepsenonspanner.operation.TransactionalOperation;
 import com.google.spanner.admin.database.v1.CreateDatabaseMetadata;
 import org.apache.commons.lang3.tuple.Pair;
 
@@ -37,7 +36,6 @@ import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
-import java.util.stream.Collectors;
 
 public class Executor {
 
@@ -45,7 +43,7 @@ public class Executor {
   private DatabaseAdminClient adminClient;
   private DatabaseId databaseId;
   private int processID;
-  private Database db;
+  private TransactionContext currentActiveTransaction;
 
   static final String TESTING_TABLE_NAME = "Testing";
   static final String HISTORY_TABLE_NAME = "History";
@@ -65,6 +63,10 @@ public class Executor {
           Type.StructField.of(KEY_COLUMN_NAME, Type.string()),
           Type.StructField.of(VALUE_COLUMN_NAME, Type.int64())
   ));
+
+  public interface TransactionFunction {
+    void run();
+  }
 
   public Executor(String instanceId, String dbId, int processID) {
     SpannerOptions options = SpannerOptions.newBuilder().build();
@@ -98,11 +100,7 @@ public class Executor {
       if (se.getErrorCode() != ErrorCode.ALREADY_EXISTS) {
         throw se;
       }
-//      System.out.println("Here 5");
-//      System.out.println(e.getMessage());
     } catch (InterruptedException e) {
-      // Throw when a thread is waiting, sleeping, or otherwise occupied,
-      // and the thread is interrupted, either before or during the activity.
       throw SpannerExceptionFactory.propagateInterrupt(e);
     }
   }
@@ -115,7 +113,7 @@ public class Executor {
       keySetBuilder.addKey(Key.of(key));
     }
 
-    Timestamp readTimeStamp = null;
+    Timestamp readTimeStamp;
     try (ReadOnlyTransaction txn = staleness == 0 ?
             client.singleUseReadOnlyTransaction() : client.singleUseReadOnlyTransaction(bounded ?
             TimestampBound.ofMaxStaleness(staleness, TimeUnit.MILLISECONDS) :
@@ -130,50 +128,62 @@ public class Executor {
     return Pair.of(result, readTimeStamp);
   }
 
-  public Timestamp runTxn(Consumer<TransactionContext> transactionToRun) {
+  public Timestamp runTxn(TransactionFunction transactionToRun) {
     TransactionRunner transactionRunner = client.readWriteTransaction();
     transactionRunner.run(new TransactionRunner.TransactionCallable<Void>() {
       @Nullable
       @Override
       public Void run(TransactionContext transaction) throws Exception {
-        transactionToRun.accept(transaction);
+        currentActiveTransaction = transaction;
+        transactionToRun.run();
+        currentActiveTransaction = null;
         return null;
       }
     });
     return transactionRunner.getCommitTimestamp();
   }
 
-  public long executeTransactionalRead(TransactionalOperation op, TransactionContext transaction) {
-    Struct row = transaction.readRow(TESTING_TABLE_NAME, Key.of(op.getKey()),
-            Arrays.asList(KEY_COLUMN_NAME, VALUE_COLUMN_NAME));
-    return row.getLong(VALUE_COLUMN_NAME);
+  public long executeTransactionalRead(String key) throws RuntimeException {
+    if (currentActiveTransaction == null)
+      throw new RuntimeException("This method should be used in a ReadWriteTransaction");
+    try (ResultSet resultSet = currentActiveTransaction.executeQuery(
+            Statement.of(String.format("SELECT %s FROM %s WHERE %s = \"%s\"", VALUE_COLUMN_NAME,
+                    TESTING_TABLE_NAME, KEY_COLUMN_NAME, key)))) {
+      resultSet.next();
+      return resultSet.getLong(VALUE_COLUMN_NAME);
+    }
   }
 
-  public void executeTransactionalWrite(TransactionalOperation op, TransactionContext transaction) {
-    transaction.buffer(Mutation.newUpdateBuilder(TESTING_TABLE_NAME)
-            .set(KEY_COLUMN_NAME).to(op.getKey()).set(VALUE_COLUMN_NAME).to(op.getValue()).build());
+  public void executeTransactionalWrite(String key, long value) {
+    if (currentActiveTransaction == null)
+      throw new RuntimeException("This method should be used in a ReadWriteTransaction");
+    currentActiveTransaction.executeUpdate(
+            Statement.of(String.format("UPDATE %s SET %s = %s WHERE %s = \"%s\"",
+                    TESTING_TABLE_NAME, VALUE_COLUMN_NAME, value, KEY_COLUMN_NAME, key)));
   }
 
-  public void recordInvoke(String loadName, List<String> representation, int staleness) {
-    recordList(loadName, representation, INVOKE, staleness);
+  public Timestamp recordInvoke(String loadName, List<String> representation, int staleness) {
+    return recordList(loadName, representation, INVOKE, staleness);
   }
 
-  public void recordInvoke(String loadName, List<String> representation) {
-    recordInvoke(loadName, representation, /*staleness=*/0);
+  public Timestamp recordInvoke(String loadName, List<String> representation) {
+    return recordInvoke(loadName, representation, /*staleness=*/0);
   }
 
   public void recordComplete(String loadName, List<String> recordRepresentation,
-                             Timestamp timestamp) {
+                             Timestamp commitTimestamp, Timestamp invokeTimestamp) {
     try {
       client.write(Arrays.asList(
               Mutation.newInsertBuilder(HISTORY_TABLE_NAME)
-                      .set(TIME_COLUMN_NAME).to(timestamp)
+                      .set(TIME_COLUMN_NAME).to(commitTimestamp)
                       .set(OPTYPE_COLUMN_NAME).to(OK)
                       .set(LOAD_COLUMN_NAME).to(loadName)
                       .set(VALUE_COLUMN_NAME).toStringArray(recordRepresentation)
                       .set(PID_COLUMN_NAME).to(processID).build(),
-              Mutation.newUpdateBuilder(HISTORY_TABLE_NAME)
-                      .set(TIME_COLUMN_NAME).to(timestamp)
+              Mutation.delete(HISTORY_TABLE_NAME, Key.of(invokeTimestamp, processID, INVOKE,
+                      loadName)),
+              Mutation.newInsertBuilder(HISTORY_TABLE_NAME)
+                      .set(TIME_COLUMN_NAME).to(commitTimestamp)
                       .set(OPTYPE_COLUMN_NAME).to(INVOKE)
                       .set(LOAD_COLUMN_NAME).to(loadName)
                       .set(VALUE_COLUMN_NAME).toStringArray(recordRepresentation)
@@ -191,7 +201,7 @@ public class Executor {
     recordList(loadName, representation, INFO, /*staleness=*/0);
   }
 
-  private void recordList(String loadName, List<String> representation, String opType,
+  private Timestamp recordList(String loadName, List<String> representation, String opType,
                           int staleness) throws RuntimeException {
     try {
        Timestamp commitTimestamp =
@@ -213,7 +223,9 @@ public class Executor {
                         .set(PID_COLUMN_NAME).to(processID).build(),
                 Mutation.delete(HISTORY_TABLE_NAME,
                         Key.of(commitTimestamp, processID, opType, loadName))));
+        return staleTimestamp;
       }
+      return commitTimestamp;
     } catch (SpannerException e) {
       System.out.println(staleness);
       System.out.println(e.getCause());
@@ -232,7 +244,6 @@ public class Executor {
     try {
       client.write(mutations);
     } catch (SpannerException e) {
-      System.out.println(e.getErrorCode());
       System.out.println(e.getMessage());
       throw new RuntimeException("RECORDER ERROR");
     }

@@ -1,5 +1,6 @@
 package com.google.jepsenonspanner.loadgenerator;
 
+import com.google.jepsenonspanner.client.Executor;
 import com.google.jepsenonspanner.operation.OperationList;
 import com.google.jepsenonspanner.operation.ReadTransaction;
 import com.google.jepsenonspanner.operation.ReadWriteTransaction;
@@ -7,6 +8,7 @@ import com.google.jepsenonspanner.operation.TransactionalOperation;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Random;
 

@@ -42,7 +42,8 @@ public class ReadTransaction extends OperationList {
   @Override
   public void executeOps(Executor client) {
     try {
-      client.recordInvoke(getLoadName(), getRecordRepresentation(), staleness);
+      Timestamp recordTimestamp = client.recordInvoke(getLoadName(), getRecordRepresentation(),
+              staleness);
       Pair<HashMap<String, Long>, Timestamp> result = client.readKeys(keys, staleness, bounded);
       HashMap<String, Long> keyValues = result.getLeft();
       Timestamp readTimeStamp = result.getRight();
@@ -50,7 +51,7 @@ public class ReadTransaction extends OperationList {
       for (Map.Entry<String, Long> kv : keyValues.entrySet()) {
         recordRepresentation.add(String.format("%s %d", kv.getKey(), kv.getValue()));
       }
-      client.recordComplete(getLoadName(), recordRepresentation, readTimeStamp);
+      client.recordComplete(getLoadName(), recordRepresentation, readTimeStamp, recordTimestamp);
     } catch (SpannerException e) {
       // TODO: figure out how to differentiate between fail and info
       client.recordFail(getLoadName(), getRecordRepresentation());
