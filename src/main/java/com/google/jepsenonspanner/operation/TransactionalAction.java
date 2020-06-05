@@ -3,7 +3,7 @@ package com.google.jepsenonspanner.operation;
 import java.util.function.BiPredicate;
 import java.util.function.BinaryOperator;
 
-public class TransactionalOperation {
+public class TransactionalAction {
 
   private String key;
   private long value;
@@ -14,10 +14,10 @@ public class TransactionalOperation {
     WRITE
   }
 
-  private Type opType;
+  private Type actionType;
 
   // the operation that depends on this instance
-  private TransactionalOperation dependent;
+  private TransactionalAction dependent;
 
   // not null if this is a dependent operation; a function that returns the value that depends on
   // a previous operation (usually a read)
@@ -31,59 +31,59 @@ public class TransactionalOperation {
    * Constructor for a dependent transactional operation 
    * @param key 
    * @param value
-   * @param opType
+   * @param actionType
    * @param findDependValFunc
    * @param decideProceedFunc   
    */
-  public TransactionalOperation(String key, int value, Type opType,
-                                BinaryOperator<Long> findDependValFunc,
-                                BiPredicate<Long, Long> decideProceedFunc) {
-    this(key, value, opType, null, findDependValFunc, decideProceedFunc);
+  public TransactionalAction(String key, int value, Type actionType,
+                             BinaryOperator<Long> findDependValFunc,
+                             BiPredicate<Long, Long> decideProceedFunc) {
+    this(key, value, actionType, null, findDependValFunc, decideProceedFunc);
   }
 
   /**
    * Constructor for a non-dependent transactional operation
    * @param key
    * @param value
-   * @param opType
+   * @param actionType
    */
-  public TransactionalOperation(String key, int value, Type opType) {
-    this(key, value, opType, null, null, null);
+  public TransactionalAction(String key, int value, Type actionType) {
+    this(key, value, actionType, null, null, null);
   }
 
   /**
    * Base constructor
    * @param key 
    * @param value
-   * @param opType
+   * @param actionType
    * @param dependent
    * @param findDependValFunc
    * @param decideProceedFunc
    */
-  public TransactionalOperation(String key, int value, Type opType,
-                                TransactionalOperation dependent,
-                                BinaryOperator<Long> findDependValFunc,
-                                BiPredicate<Long, Long> decideProceedFunc) {
+  public TransactionalAction(String key, int value, Type actionType,
+                             TransactionalAction dependent,
+                             BinaryOperator<Long> findDependValFunc,
+                             BiPredicate<Long, Long> decideProceedFunc) {
     this.key = key;
     this.value = value;
-    this.opType = opType;
+    this.actionType = actionType;
     this.dependent = dependent;
     this.findDependValFunc = findDependValFunc;
     this.decideProceedFunc = decideProceedFunc;
   }
   
-  public static TransactionalOperation createTransactionalRead(String key) {
-    return new TransactionalOperation(key, 0, Type.READ, null, null, null);
+  public static TransactionalAction createTransactionalRead(String key) {
+    return new TransactionalAction(key, 0, Type.READ, null, null, null);
   }
 
-  public static TransactionalOperation createTransactionalWrite(String key, int value) {
-    return new TransactionalOperation(key, value, Type.WRITE, null, null, null);
+  public static TransactionalAction createTransactionalWrite(String key, int value) {
+    return new TransactionalAction(key, value, Type.WRITE, null, null, null);
   }
 
-  public static TransactionalOperation createDependentTransactionalWrite(String key, int value,
-                                                                         BinaryOperator<Long> findDependValFunc,
-                                                                         BiPredicate<Long, Long> decideProceedFunc) {
-    return new TransactionalOperation(key, value, Type.WRITE, null, findDependValFunc, decideProceedFunc);
+  public static TransactionalAction createDependentTransactionalWrite(String key, int value,
+                                                                      BinaryOperator<Long> findDependValFunc,
+                                                                      BiPredicate<Long, Long> decideProceedFunc) {
+    return new TransactionalAction(key, value, Type.WRITE, null, findDependValFunc, decideProceedFunc);
   }
   
   /**
@@ -111,19 +111,19 @@ public class TransactionalOperation {
    *
    * @param dependent the dependent operation
    */
-  public void setDependentOp(TransactionalOperation dependent) {
+  public void setDependentAction(TransactionalAction dependent) {
     this.dependent = dependent;
   }
 
   /**
    * Returns the dependent operation that relies on this operation
    */
-  public TransactionalOperation getDependentOp() {
+  public TransactionalAction getDependentAction() {
     return dependent;
   }
 
   public boolean isRead() {
-    return opType == Type.READ;
+    return actionType == Type.READ;
   }
 
   public String getKey() {

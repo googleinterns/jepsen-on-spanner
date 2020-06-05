@@ -1,14 +1,12 @@
 package com.google.jepsenonspanner.loadgenerator;
 
-import com.google.jepsenonspanner.client.Executor;
-import com.google.jepsenonspanner.operation.OperationList;
+import com.google.jepsenonspanner.operation.Operation;
 import com.google.jepsenonspanner.operation.ReadTransaction;
 import com.google.jepsenonspanner.operation.ReadWriteTransaction;
-import com.google.jepsenonspanner.operation.TransactionalOperation;
+import com.google.jepsenonspanner.operation.TransactionalAction;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Random;
 
@@ -127,7 +125,7 @@ public class BankLoadGenerator extends LoadGenerator {
   }
 
   @Override
-  public OperationList nextOperation() {
+  public Operation nextOperation() {
     // check if reached limit
     if (opLimit <= 0) {
       throw new RuntimeException("Bank generator has reached limit");
@@ -170,27 +168,27 @@ public class BankLoadGenerator extends LoadGenerator {
   }
 
   private ReadWriteTransaction transfer() {
-    List<TransactionalOperation> transaction = new ArrayList<>();
+    List<TransactionalAction> transaction = new ArrayList<>();
 
     // transfer from account 1 to account 2
     int[] accounts = rand.ints(0, acctNumber).distinct().limit(2).toArray();
     String acct1 = String.valueOf(accounts[0]);
     String acct2 = String.valueOf(accounts[1]);
-    transaction.add(TransactionalOperation.createTransactionalRead(acct1));
-    transaction.add(TransactionalOperation.createTransactionalRead(acct2));
+    transaction.add(TransactionalAction.createTransactionalRead(acct1));
+    transaction.add(TransactionalAction.createTransactionalRead(acct2));
 
     // add the dependent write operations
     int transferAmount = rand.nextInt(this.maxBalance) + 1;
-    TransactionalOperation acct1Write =
-            TransactionalOperation.createDependentTransactionalWrite(acct1, transferAmount,
+    TransactionalAction acct1Write =
+            TransactionalAction.createDependentTransactionalWrite(acct1, transferAmount,
                     (balance, transfer) -> balance - transfer,
                     (balance, transfer) -> balance >= transfer);
-    transaction.get(0).setDependentOp(acct1Write);
-    TransactionalOperation acct2Write =
-            TransactionalOperation.createDependentTransactionalWrite(acct2, transferAmount,
+    transaction.get(0).setDependentAction(acct1Write);
+    TransactionalAction acct2Write =
+            TransactionalAction.createDependentTransactionalWrite(acct2, transferAmount,
                     (balance, transfer) -> balance + transfer,
                     (balance, transfer) -> true);
-    transaction.get(1).setDependentOp(acct2Write);
+    transaction.get(1).setDependentAction(acct2Write);
 
     return new ReadWriteTransaction(TRANSFER_LOAD_NAME, Collections.singletonList(String.format(
             "%s %s %d", acct1, acct2, transferAmount)), transaction);

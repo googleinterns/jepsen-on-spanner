@@ -16,16 +16,27 @@ import java.util.function.Consumer;
  * may not be dependent. The intention is that this class will have as little dependency with the
  * Spanner instance as possible, since that part should be encapsulated in the Executor class.
  */
-public class ReadWriteTransaction extends OperationList {
+public class ReadWriteTransaction extends Operation {
 
-  private List<TransactionalOperation> spannerActions;
+  private List<TransactionalAction> spannerActions;
 
   public ReadWriteTransaction(String loadName, List<String> recordRepresentation,
-                              List<TransactionalOperation> spannerActions) {
+                              List<TransactionalAction> spannerActions) {
     super(loadName, recordRepresentation);
     this.spannerActions = spannerActions;
   }
 
+  /**
+   * The execution function of a ReadWriteTransaction will:
+   * - Write an "invoke" entry into the history table
+   * - Traverse through each TransactionalAction, and traverse through any dependent action in a
+   * DFS style if there is any; abort any time there is a failed condition by throwing a
+   * RuntimeException
+   * - Write an "ok" entry into the history table and update the timestamp of the "invoke" entry
+   * - If there is a SpannerException caused by a RuntimeError thrown from the transaction
+   * function, write a "fail" entry
+   * - Otherwise, write an "info" entry
+   */
   @Override
   public Consumer<Executor> getExecutionPlan() {
     return executor -> {
@@ -34,21 +45,22 @@ public class ReadWriteTransaction extends OperationList {
         Timestamp commitTimestamp = executor.runTxn(new Executor.TransactionFunction() {
           @Override
           public void run(TransactionContext transaction) {
-            for (TransactionalOperation op : spannerActions) {
+            for (TransactionalAction action : spannerActions) {
               long dependentValue = -1;
 
               // Iterate through all dependent operations and execute them first
-              for (; op != null; op = op.getDependentOp()) {
-                if (!op.decideProceed(dependentValue)) {
-                  throw new RuntimeException("Unable to proceed");
+              for (; action != null; action = action.getDependentAction()) {
+                if (!action.decideProceed(dependentValue)) {
+                  throw new RuntimeException(String.format("Unable to proceed to dependent " +
+                          "action %s", String.valueOf(action)));
                   // abort the whole transaction if anything is determined as unable to proceed
                   // This will force Spanner to throw a ErrorCode.UNKNOWN exception
                 }
-                op.findDependentValue(dependentValue);
-                if (op.isRead()) {
-                  dependentValue = executor.executeTransactionalRead(op.getKey(), transaction);
+                action.findDependentValue(dependentValue);
+                if (action.isRead()) {
+                  dependentValue = executor.executeTransactionalRead(action.getKey(), transaction);
                 } else {
-                  executor.executeTransactionalWrite(op.getKey(), op.getValue(), transaction);
+                  executor.executeTransactionalWrite(action.getKey(), action.getValue(), transaction);
                 }
               }
             }
@@ -57,8 +69,10 @@ public class ReadWriteTransaction extends OperationList {
         executor.recordComplete(getLoadName(), getRecordRepresentation(), commitTimestamp,
                 recordTimestamp);
       } catch (SpannerException e) {
-        if (e.getErrorCode() == ErrorCode.UNKNOWN) {
-          // The transaction function has thrown an error, meaning that the transaction fails
+        if (e.getErrorCode() == ErrorCode.UNKNOWN && e.getCause() instanceof RuntimeException) {
+          // The transaction function has thrown a RuntimeException, meaning that the transaction
+          // fails; note that RuntimeException can also be thrown from executeTransactionalRead /
+          // Write
           executor.recordFail(getLoadName(), getRecordRepresentation());
         } else {
           executor.recordInfo(getLoadName(), getRecordRepresentation());
@@ -69,7 +83,7 @@ public class ReadWriteTransaction extends OperationList {
 
   @VisibleForTesting
   /** ALL TESTING FUNCTIONS BELOW */
-  public List<TransactionalOperation> getSpannerActions() {
+  public List<TransactionalAction> getSpannerActions() {
     return Collections.unmodifiableList(spannerActions);
   }
 }

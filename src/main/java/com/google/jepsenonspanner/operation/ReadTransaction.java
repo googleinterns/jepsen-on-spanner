@@ -17,7 +17,7 @@ import java.util.function.Consumer;
  * ReadTransaction class encapsulates a read-only transaction that can have a certain staleness,
  * whether bounded or exact.
  */
-public class ReadTransaction extends OperationList {
+public class ReadTransaction extends Operation {
 
   private List<String> keys;
   private int staleness;
@@ -58,7 +58,8 @@ public class ReadTransaction extends OperationList {
    * - Write an "invoke" entry into the history table
    * - Read the results at the given staleness
    * - Write an "ok" entry into the history table and update the timestamp of the "invoke" entry
-   * If any exception is thrown, it will write a "fail" entry instead
+   * - If a RuntimeException is thrown, it will write a "fail" entry
+   * - If a SpannerException is thrown, it will write an "info" entry
    */
   @Override
   public Consumer<Executor> getExecutionPlan() {
@@ -78,7 +79,8 @@ public class ReadTransaction extends OperationList {
         executor.recordComplete(getLoadName(), recordRepresentation, readTimeStamp,
                 recordTimestamp);
       } catch (SpannerException e) {
-        // TODO: figure out how to differentiate between fail and info
+        executor.recordInfo(getLoadName(), getRecordRepresentation());
+      } catch (RuntimeException e) {
         executor.recordFail(getLoadName(), getRecordRepresentation());
       }
     };

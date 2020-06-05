@@ -125,14 +125,11 @@ public class Executor {
   /**
    * Given a list of string as keys, returns a pair where the first element is the key-value
    * mapping read and the second element is the read timestamp. The staleness and bounded
-   * parameters are used to achieve Exact Stale reads and Bounded Stale reads.
-   * @param keys
-   * @param staleness
-   * @param bounded
-   * @throws SpannerException
+   * parameters are used to achieve Exact Stale reads and Bounded Stale reads. If there is a
+   * non-existent key, throw a RuntimeException.
    */
   public Pair<HashMap<String, Long>, Timestamp> readKeys(List<String> keys, int staleness,
-                                                   boolean bounded) throws SpannerException {
+                                                   boolean bounded) throws RuntimeException {
     HashMap<String, Long> result = new HashMap<>();
     KeySet.Builder keySetBuilder = KeySet.newBuilder();
     for (String key : keys) {
@@ -154,6 +151,10 @@ public class Executor {
       while (resultSet.next()) {
         result.put(resultSet.getString(KEY_COLUMN_NAME), resultSet.getLong(VALUE_COLUMN_NAME));
       }
+      if (result.size() != keys.size()) {
+        throw new RuntimeException(String.format("Non-existent key found in read of %s", keys));
+      }
+      System.out.println(result.size());
     }
     return Pair.of(result, txn.getReadTimestamp());
   }
@@ -161,7 +162,6 @@ public class Executor {
   /**
    * Runs the given transactionToRun within a transaction.
    * Returns the commit timestamp of the transaction.
-   * @param transactionToRun
    */
   public Timestamp runTxn(TransactionFunction transactionToRun) {
     TransactionRunner transactionRunner = client.readWriteTransaction();
@@ -178,8 +178,8 @@ public class Executor {
 
   /**
    * Given a key, returns the result of a transactional read. This method must be used only within
-   * the user-defined transaction function.
-   * @param key
+   * the user-defined transaction function. If there is a non-existent key, throw a
+   * RuntimeException.
    */
   public long executeTransactionalRead(String key, TransactionContext transaction) throws RuntimeException {
     // Using SQL interface so that all previous writes will be reflected in subsequent reads in
@@ -187,69 +187,63 @@ public class Executor {
     try (ResultSet resultSet = transaction.executeQuery(
             Statement.of(String.format("SELECT %s FROM %s WHERE %s = \"%s\"", VALUE_COLUMN_NAME,
                     TESTING_TABLE_NAME, KEY_COLUMN_NAME, key)))) {
-      resultSet.next();
+      if (!resultSet.next()) {
+        throw new RuntimeException(String.format("Key %s not found on transactional read", key));
+      }
       return resultSet.getLong(VALUE_COLUMN_NAME);
     }
   }
 
   /**
    * Given a key and a value, write the key-value pair into the database. See above
-   * executeTransactionalRead
-   * @param key
-   * @param value
+   * executeTransactionalRead. If there is a non-existent key, throw a RuntimeException.
    */
-  public void executeTransactionalWrite(String key, long value, TransactionContext transaction) {
-    transaction.executeUpdate(
+  public void executeTransactionalWrite(String key, long value, TransactionContext transaction) throws RuntimeException {
+    long rowsModified = transaction.executeUpdate(
             Statement.of(String.format("UPDATE %s SET %s = %s WHERE %s = \"%s\"",
                     TESTING_TABLE_NAME, VALUE_COLUMN_NAME, value, KEY_COLUMN_NAME, key)));
+    if (rowsModified != 1) {
+      throw new RuntimeException(String.format("Key %s not found on transactional write", key));
+    }
   }
 
   /**
-   * Records an "invoke" history [loadName, representation, staleness] into the history table. If
+   * Records an "invoke" history [opName, representation, staleness] into the history table. If
    * the record is stale, return its stale read timestamp; otherwise returns the commit timestamp
    * of this record.
-   * @param loadName
-   * @param representation
-   * @param staleness
    */
-  public Timestamp recordInvoke(String loadName, List<String> representation, int staleness) {
-    return writeRecord(loadName, representation, INVOKE, staleness);
+  public Timestamp recordInvoke(String opName, List<String> representation, int staleness) {
+    return writeRecord(opName, representation, INVOKE, staleness);
   }
 
   /**
    * Overloaded recordInvoke for non-stale operations / transactions.
    * Returns the commit timestamp of this record.
-   * @param loadName
-   * @param representation
    */
-  public Timestamp recordInvoke(String loadName, List<String> representation) {
-    return recordInvoke(loadName, representation, /*staleness=*/0);
+  public Timestamp recordInvoke(String opName, List<String> representation) {
+    return recordInvoke(opName, representation, /*staleness=*/0);
   }
 
   /**
    * Given a load name, a load value representation, a commit timestamp and an invoke timestamp,
    * record the "ok" history and update the timestamp of "invoke" history.
-   * @param loadName
-   * @param recordRepresentation
-   * @param commitTimestamp
-   * @param invokeTimestamp
    */
-  public void recordComplete(String loadName, List<String> recordRepresentation,
+  public void recordComplete(String opName, List<String> recordRepresentation,
                              Timestamp commitTimestamp, Timestamp invokeTimestamp) {
     try {
       client.write(Arrays.asList(
               Mutation.newInsertBuilder(HISTORY_TABLE_NAME)
                       .set(TIME_COLUMN_NAME).to(commitTimestamp)
                       .set(RECORD_TYPE_COLUMN_NAME).to(OK)
-                      .set(OP_NAME_COLUMN_NAME).to(loadName)
+                      .set(OP_NAME_COLUMN_NAME).to(opName)
                       .set(VALUE_COLUMN_NAME).toStringArray(recordRepresentation)
                       .set(PID_COLUMN_NAME).to(processID).build(),
               Mutation.delete(HISTORY_TABLE_NAME, Key.of(invokeTimestamp, processID, INVOKE,
-                      loadName)), // delete the old invoke record first, since key cannot be updated
+                      opName)), // delete the old invoke record first, since key cannot be updated
               Mutation.newInsertBuilder(HISTORY_TABLE_NAME)
                       .set(TIME_COLUMN_NAME).to(commitTimestamp)
                       .set(RECORD_TYPE_COLUMN_NAME).to(INVOKE)
-                      .set(OP_NAME_COLUMN_NAME).to(loadName)
+                      .set(OP_NAME_COLUMN_NAME).to(opName)
                       .set(VALUE_COLUMN_NAME).toStringArray(recordRepresentation)
                       .set(PID_COLUMN_NAME).to(processID).build()));
     } catch (SpannerException e) {
@@ -259,20 +253,16 @@ public class Executor {
 
   /**
    * Records a fail history.
-   * @param loadName
-   * @param representation
    */
-  public void recordFail(String loadName, List<String> representation) {
-    writeRecord(loadName, representation, FAIL, /*staleness=*/0);
+  public void recordFail(String opName, List<String> representation) {
+    writeRecord(opName, representation, FAIL, /*staleness=*/0);
   }
 
   /**
    * Records an info history.
-   * @param loadName
-   * @param representation
    */
-  public void recordInfo(String loadName, List<String> representation) {
-    writeRecord(loadName, representation, INFO, /*staleness=*/0);
+  public void recordInfo(String opName, List<String> representation) {
+    writeRecord(opName, representation, INFO, /*staleness=*/0);
   }
 
 
@@ -280,11 +270,6 @@ public class Executor {
    * Helper function that inserts a history [opName, representation, staleness] into the
    * history table with the given recordType (can be one of "invoke", "ok", "fail" or "info").
    * Optional staleness will subtract staleness amount of milliseconds from the commit timestamp.
-   * @param opName
-   * @param representation
-   * @param recordType
-   * @param staleness
-   * @throws RuntimeException
    */
   private Timestamp writeRecord(String opName, List<String> representation, String recordType,
                                 int staleness) throws RuntimeException {
@@ -324,7 +309,6 @@ public class Executor {
   /**
    * Given a key-value mapping, insert it into the database. This function is intended to be used
    * in initialization.
-   * @param initialKVs
    */
   public void initKeyValues(HashMap<String, Long> initialKVs) {
     List<Mutation> mutations = new ArrayList<>();
@@ -343,8 +327,6 @@ public class Executor {
 
   /**
    * Converts a row of History table into a Map that will be written into the edn file.
-   * @param row
-   * @return
    */
   private Map<Keyword, Object> convertToMap(Struct row) {
     Map<Keyword, Object> record = new HashMap<>();

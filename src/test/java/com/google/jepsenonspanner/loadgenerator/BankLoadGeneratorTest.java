@@ -1,9 +1,9 @@
 package com.google.jepsenonspanner.loadgenerator;
 
-import com.google.jepsenonspanner.operation.OperationList;
+import com.google.jepsenonspanner.operation.Operation;
 import com.google.jepsenonspanner.operation.ReadTransaction;
 import com.google.jepsenonspanner.operation.ReadWriteTransaction;
-import com.google.jepsenonspanner.operation.TransactionalOperation;
+import com.google.jepsenonspanner.operation.TransactionalAction;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -35,7 +35,7 @@ class BankLoadGeneratorTest {
   void checkReads(BankLoadGenerator.Config config, boolean stale, boolean bounded) {
     BankLoadGenerator gen = new BankLoadGenerator(OP_LIMIT, MAX_BALANCE, ACCT_NUM, config);
     while (gen.hasLoad()) {
-      OperationList ops = gen.nextOperation();
+      Operation ops = gen.nextOperation();
       assertTrue(ops instanceof ReadTransaction);
       ReadTransaction txn = (ReadTransaction) ops;
       assertEquals(txn.getStaleness() != 0, stale);
@@ -68,18 +68,18 @@ class BankLoadGeneratorTest {
             /*bounded=*/false);
   }
 
-  void checkTransactionalRead(TransactionalOperation op) {
-    assertEquals(op.getValue(), 0);
-    int acct = Integer.parseInt(op.getKey());
+  void checkTransactionalRead(TransactionalAction action) {
+    assertEquals(action.getValue(), 0);
+    int acct = Integer.parseInt(action.getKey());
     assertTrue(acct >= 0 && acct < ACCT_NUM);
   }
 
-  void checkTransfer(TransactionalOperation op) {
-    assertNotNull(op);
-    assertFalse(op.isRead());
-    int acct = Integer.parseInt(op.getKey());
+  void checkTransfer(TransactionalAction action) {
+    assertNotNull(action);
+    assertFalse(action.isRead());
+    int acct = Integer.parseInt(action.getKey());
     assertTrue(acct >= 0 && acct < ACCT_NUM);
-    long transferAmt = op.getValue();
+    long transferAmt = action.getValue();
     assertTrue(transferAmt <= MAX_BALANCE && transferAmt > 0);
   }
 
@@ -88,33 +88,33 @@ class BankLoadGeneratorTest {
     BankLoadGenerator gen = new BankLoadGenerator(OP_LIMIT, MAX_BALANCE, ACCT_NUM,
             new BankLoadGenerator.Config(0, 0, 0, /*transfer=*/1));
     while (gen.hasLoad()) {
-      OperationList ops = gen.nextOperation();
-      assertTrue(ops instanceof ReadWriteTransaction);
-      ReadWriteTransaction txn = (ReadWriteTransaction) ops;
-      List<TransactionalOperation> transactionalOperations = txn.getSpannerActions();
-      assertEquals(transactionalOperations.size(), 2); // transfer between 2 accounts
+      Operation operation = gen.nextOperation();
+      assertTrue(operation instanceof ReadWriteTransaction);
+      ReadWriteTransaction txn = (ReadWriteTransaction) operation;
+      List<TransactionalAction> actions = txn.getSpannerActions();
+      assertEquals(actions.size(), 2); // transfer between 2 accounts
 
-      for (TransactionalOperation op : transactionalOperations) {
-        checkTransactionalRead(op);
-        checkTransfer(op.getDependentOp());
+      for (TransactionalAction action : actions) {
+        checkTransactionalRead(action);
+        checkTransfer(action.getDependentAction());
       }
 
       // additionally, check functions of each transfer
-      TransactionalOperation subtractOp = transactionalOperations.get(0).getDependentOp();
-      long transferAmt = subtractOp.getValue();
-      assertTrue(subtractOp.decideProceed(transferAmt + 1));
-      assertTrue(subtractOp.decideProceed(subtractOp.getValue()));
-      assertFalse(subtractOp.decideProceed(transferAmt - 1));
-      subtractOp.findDependentValue(transferAmt + 1);
-      assertEquals(subtractOp.getValue(), 1);
+      TransactionalAction subtractAction = actions.get(0).getDependentAction();
+      long transferAmt = subtractAction.getValue();
+      assertTrue(subtractAction.decideProceed(transferAmt + 1));
+      assertTrue(subtractAction.decideProceed(subtractAction.getValue()));
+      assertFalse(subtractAction.decideProceed(transferAmt - 1));
+      subtractAction.findDependentValue(transferAmt + 1);
+      assertEquals(subtractAction.getValue(), 1);
 
-      TransactionalOperation addOp = transactionalOperations.get(1).getDependentOp();
-      long transferAmt2 = addOp.getValue();
+      TransactionalAction addAction = actions.get(1).getDependentAction();
+      long transferAmt2 = addAction.getValue();
       assertEquals(transferAmt, transferAmt2);
       // decide function will always return true, even if invalid; up to client to fail this txn
-      assertTrue(addOp.decideProceed(transferAmt - 1));
-      addOp.findDependentValue(addOp.getValue());
-      assertEquals(addOp.getValue(), transferAmt2 * 2);
+      assertTrue(addAction.decideProceed(transferAmt - 1));
+      addAction.findDependentValue(addAction.getValue());
+      assertEquals(addAction.getValue(), transferAmt2 * 2);
     }
   }
 
@@ -128,11 +128,11 @@ class BankLoadGeneratorTest {
 
     for (int i = 0; i < OP_LIMIT; i++) {
       assertTrue(generators.get(0).hasLoad());
-      OperationList op = generators.get(0).nextOperation();
+      Operation op = generators.get(0).nextOperation();
 
       // All operations generated should be the same within this iteration
       for (int j = 1; j < generators.size(); j++) {
-        OperationList newOp = generators.get(j).nextOperation();
+        Operation newOp = generators.get(j).nextOperation();
         assertEquals(newOp, op);
       }
     }

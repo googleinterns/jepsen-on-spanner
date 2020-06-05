@@ -1,9 +1,6 @@
 package com.google.jepsenonspanner.loadgenerator;
 
-import com.google.jepsenonspanner.client.Executor;
-import com.google.jepsenonspanner.operation.OperationList;
-
-import java.util.HashMap;
+import com.google.jepsenonspanner.operation.Operation;
 
 /**
  * A load generator generates testing load for the client to interact with the Spanner instance.
@@ -19,16 +16,9 @@ public abstract class LoadGenerator {
   }
 
   /**
-   * Initialize any key-value pairs in the database as necessary
-   */
-  public void initKVs(HashMap<String, Long> initialData, Executor executor) {
-    executor.initKeyValues(initialData);
-  }
-
-  /**
    * Returns the next operations for the client wrapper to execute
    */
-  public abstract OperationList nextOperation();
+  public abstract Operation nextOperation();
 
   /**
    * Returns if the generator has more loads

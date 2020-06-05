@@ -2,6 +2,7 @@ package com.google.jepsenonspanner.client;
 
 import com.google.cloud.Timestamp;
 import com.google.cloud.spanner.ErrorCode;
+import com.google.cloud.spanner.Key;
 import com.google.cloud.spanner.KeySet;
 import com.google.cloud.spanner.Mutation;
 import com.google.cloud.spanner.ResultSet;
@@ -15,6 +16,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
