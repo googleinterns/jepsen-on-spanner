@@ -20,6 +20,16 @@ public abstract class OperationList {
     this.recordRepresentation = recordRepresentation;
   }
 
+  /**
+   * Returns a function that takes an Executor as the argument and executes this operation. This
+   * is to highlight the design that an OperationList is intended as a "data" class, and the
+   * execution should not be done "by" it, but instead "on" it.
+   * Example:
+   * LoadGenerator gen = ...;
+   * OperationList ops = gen.nextOperation();
+   * Consumer<Executor> func = ops.getExecutionPlan();
+   * func.accept(exec);
+   */
   public abstract Consumer<Executor> getExecutionPlan();
 
   public String getLoadName() {

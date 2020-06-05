@@ -91,7 +91,7 @@ class BankLoadGeneratorTest {
       OperationList ops = gen.nextOperation();
       assertTrue(ops instanceof ReadWriteTransaction);
       ReadWriteTransaction txn = (ReadWriteTransaction) ops;
-      List<TransactionalOperation> transactionalOperations = txn.getOps();
+      List<TransactionalOperation> transactionalOperations = txn.getSpannerActions();
       assertEquals(transactionalOperations.size(), 2); // transfer between 2 accounts
 
       for (TransactionalOperation op : transactionalOperations) {

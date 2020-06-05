@@ -136,7 +136,7 @@ public class TransactionalOperation {
 
   @Override
   public String toString() {
-    return String.format("%s %s, dependent = [ %s ]", isRead() ? "Strong Read" : "Write",
-            super.toString(), dependent.toString());
+    return String.format("%s %s %s, dependent = [ %s ]", isRead() ? "Strong Read" : "Write",
+            key, value, String.valueOf(dependent));
   }
 }

@@ -137,35 +137,36 @@ public class BankLoadGenerator extends LoadGenerator {
     int nextOp = rand.nextInt();
     switch (config.categorize(nextOp)) {
       case STRONG_READ:
-        return read(/*stale=*/false);
+        return strongRead();
       case BOUNDED_STALE_READ:
-        return read(/*stale=*/true, /*bounded=*/true);
+        return boundedStaleRead();
       case EXACT_STALE_READ:
-        return read(/*stale=*/true);
+        return exactStaleRead();
       default:
         return transfer();
     }
   }
 
-  private ReadTransaction read(boolean stale, boolean bounded) {
-    int millisecondsPast = 0;
-    if (stale) {
-      millisecondsPast = rand.nextInt(MAX_MILLISECOND_PAST) + 1; // prevent 0 ms in the past
-    }
+  private List<String> getReadKeys() {
     List<String> keys = new ArrayList<>();
     for (int i = 0; i < acctNumber; i++) {
-      keys.add(Integer.toString(i));
+      keys.add(String.valueOf(i));
     }
-    // All the record representation fields are null, because we read across all accounts
-    if (!stale)
-      return ReadTransaction.createStrongRead(READ_LOAD_NAME, keys);
-    if (bounded)
-      return ReadTransaction.createBoundedStaleRead(READ_LOAD_NAME, keys, millisecondsPast);
-    return ReadTransaction.createExactStaleRead(READ_LOAD_NAME, keys, millisecondsPast);
+    return keys;
   }
 
-  private ReadTransaction read(boolean stale) {
-    return read(stale, false);
+  private ReadTransaction strongRead() {
+    return ReadTransaction.createStrongRead(READ_LOAD_NAME, getReadKeys());
+  }
+
+  private ReadTransaction boundedStaleRead() {
+    return ReadTransaction.createBoundedStaleRead(READ_LOAD_NAME, getReadKeys(),
+            rand.nextInt(MAX_MILLISECOND_PAST) + 1);
+  }
+
+  private ReadTransaction exactStaleRead() {
+    return ReadTransaction.createExactStaleRead(READ_LOAD_NAME, getReadKeys(),
+            rand.nextInt(MAX_MILLISECOND_PAST) + 1);
   }
 
   private ReadWriteTransaction transfer() {

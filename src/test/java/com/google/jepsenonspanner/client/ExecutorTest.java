@@ -62,8 +62,8 @@ class ExecutorTest {
 
   public void checkSingleRecord(Struct row, String opType, String load, List<String> representation,
                         long processID, Timestamp timestamp) {
-    assertEquals(row.getString(Executor.OPTYPE_COLUMN_NAME), opType);
-    assertEquals(row.getString(Executor.LOAD_COLUMN_NAME), load);
+    assertEquals(row.getString(Executor.RECORD_TYPE_COLUMN_NAME), opType);
+    assertEquals(row.getString(Executor.OP_NAME_COLUMN_NAME), load);
     assertEquals(row.getStringList(Executor.VALUE_COLUMN_NAME), representation);
     assertEquals(row.getLong(Executor.PID_COLUMN_NAME), processID);
     if (timestamp != null)
@@ -81,8 +81,8 @@ class ExecutorTest {
   ResultSet retrieveAllRecords() {
     return executor.getClient().singleUse().read(Executor.HISTORY_TABLE_NAME,
             KeySet.all(),
-            Arrays.asList(Executor.TIME_COLUMN_NAME, Executor.OPTYPE_COLUMN_NAME,
-                    Executor.LOAD_COLUMN_NAME, Executor.VALUE_COLUMN_NAME,
+            Arrays.asList(Executor.TIME_COLUMN_NAME, Executor.RECORD_TYPE_COLUMN_NAME,
+                    Executor.OP_NAME_COLUMN_NAME, Executor.VALUE_COLUMN_NAME,
                     Executor.PID_COLUMN_NAME));
   }
 

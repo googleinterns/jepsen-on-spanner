@@ -14,7 +14,7 @@ import java.util.Map;
 import java.util.function.Consumer;
 
 /**
- * ReadTransaction class encapsulates a readonly transaction that can have a certain staleness,
+ * ReadTransaction class encapsulates a read-only transaction that can have a certain staleness,
  * whether bounded or exact.
  */
 public class ReadTransaction extends OperationList {
@@ -32,12 +32,11 @@ public class ReadTransaction extends OperationList {
   }
 
   /**
-   * Creates a strong read. Note that the representation is initialized as teh same as the keys.
+   * Creates a strong read. Note that the representation is initialized as the same as the keys.
    * This is because there will be no values read initially, so only keys are present in the
    * representations in the history table; they will be updated once the read returns.
    * @param loadName
    * @param keys
-   * @return
    */
   public static ReadTransaction createStrongRead(String loadName, List<String> keys) {
     return new ReadTransaction(loadName, keys, keys, /*staleness=*/0, /*bounded
@@ -54,6 +53,13 @@ public class ReadTransaction extends OperationList {
     return new ReadTransaction(loadName, keys, keys, staleness, /*bounded=*/false);
   }
 
+  /**
+   * The execution plan of a read-only transaction will:
+   * - Write an "invoke" entry into the history table
+   * - Read the results at the given staleness
+   * - Write an "ok" entry into the history table and update the timestamp of the "invoke" entry
+   * If any exception is thrown, it will write a "fail" entry instead
+   */
   @Override
   public Consumer<Executor> getExecutionPlan() {
     return executor -> {

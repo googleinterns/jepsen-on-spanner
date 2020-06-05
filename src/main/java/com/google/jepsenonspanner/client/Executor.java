@@ -21,14 +21,11 @@ import com.google.cloud.spanner.Struct;
 import com.google.cloud.spanner.TimestampBound;
 import com.google.cloud.spanner.TransactionContext;
 import com.google.cloud.spanner.TransactionRunner;
-import com.google.cloud.spanner.Type;
 import com.google.cloud.spanner.Value;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.spanner.admin.database.v1.CreateDatabaseMetadata;
 import org.apache.commons.lang3.tuple.Pair;
 import us.bpsm.edn.Keyword;
-import us.bpsm.edn.Named;
-import us.bpsm.edn.Symbol;
 import us.bpsm.edn.printer.Printers;
 
 import javax.annotation.Nullable;
@@ -42,7 +39,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
 
 /**
  * Executor class encapsulates the details of a maintaining a client and facilitating its
@@ -61,10 +57,10 @@ public class Executor {
   public static final String HISTORY_TABLE_NAME = "History";
   public static final String KEY_COLUMN_NAME = "Key";
   public static final String VALUE_COLUMN_NAME = "Value";
-  public static final String OPTYPE_COLUMN_NAME = "OpType";
+  public static final String RECORD_TYPE_COLUMN_NAME = "OpType";
   public static final String TIME_COLUMN_NAME = "Time";
   public static final String PID_COLUMN_NAME = "ProcessID";
-  public static final String LOAD_COLUMN_NAME = "Load";
+  public static final String OP_NAME_COLUMN_NAME = "Load";
   public static final String INVOKE = "invoke";
   public static final String OK = "ok";
   public static final String FAIL = "fail";
@@ -77,6 +73,11 @@ public class Executor {
    * be run inside a readWriteTransaction. An alternative would be to use the Java native
    * Runnable interface, but considering that will create confusion as it is usually associated
    * with Thread, we create one that is unique to the Executor class.
+   *
+   * Naming distinction:
+   * - Record type refers to the type of record written into history table i.e. "invoke" or "ok"
+   * - Op refers to the load generated and defined by the generator
+   * - Spanner Action refers to the basic reads and writes that an Op is consisted of
    */
   public interface TransactionFunction {
     void run(TransactionContext transaction);
@@ -96,12 +97,12 @@ public class Executor {
                     "CREATE TABLE " + HISTORY_TABLE_NAME + " (\n" +
                             "    " + TIME_COLUMN_NAME + "   TIMESTAMP NOT NULL\n" +
                             "    OPTIONS (allow_commit_timestamp = true),\n" +
-                            "    " + OPTYPE_COLUMN_NAME + " STRING(6) NOT NULL,\n" +
-                            "    " + LOAD_COLUMN_NAME + "   STRING(MAX) NOT NULL,\n" +
+                            "    " + RECORD_TYPE_COLUMN_NAME + " STRING(6) NOT NULL,\n" +
+                            "    " + OP_NAME_COLUMN_NAME + "   STRING(MAX) NOT NULL,\n" +
                             "    " + VALUE_COLUMN_NAME + "  ARRAY<STRING(MAX)>,\n" +
                             "    " + PID_COLUMN_NAME + "    INT64 NOT NULL,\n" +
                             ") PRIMARY KEY(" + TIME_COLUMN_NAME + ", " + PID_COLUMN_NAME + ", " +
-                            OPTYPE_COLUMN_NAME + ", " + LOAD_COLUMN_NAME + ")",
+                            RECORD_TYPE_COLUMN_NAME + ", " + OP_NAME_COLUMN_NAME + ")",
                     "CREATE TABLE " + TESTING_TABLE_NAME + " (\n" +
                             "    " + KEY_COLUMN_NAME + "   STRING(MAX) NOT NULL,\n" +
                             "    " + VALUE_COLUMN_NAME + " INT64 NOT NULL,\n" +
@@ -212,7 +213,7 @@ public class Executor {
    * @param staleness
    */
   public Timestamp recordInvoke(String loadName, List<String> representation, int staleness) {
-    return recordList(loadName, representation, INVOKE, staleness);
+    return writeRecord(loadName, representation, INVOKE, staleness);
   }
 
   /**
@@ -239,16 +240,16 @@ public class Executor {
       client.write(Arrays.asList(
               Mutation.newInsertBuilder(HISTORY_TABLE_NAME)
                       .set(TIME_COLUMN_NAME).to(commitTimestamp)
-                      .set(OPTYPE_COLUMN_NAME).to(OK)
-                      .set(LOAD_COLUMN_NAME).to(loadName)
+                      .set(RECORD_TYPE_COLUMN_NAME).to(OK)
+                      .set(OP_NAME_COLUMN_NAME).to(loadName)
                       .set(VALUE_COLUMN_NAME).toStringArray(recordRepresentation)
                       .set(PID_COLUMN_NAME).to(processID).build(),
               Mutation.delete(HISTORY_TABLE_NAME, Key.of(invokeTimestamp, processID, INVOKE,
                       loadName)), // delete the old invoke record first, since key cannot be updated
               Mutation.newInsertBuilder(HISTORY_TABLE_NAME)
                       .set(TIME_COLUMN_NAME).to(commitTimestamp)
-                      .set(OPTYPE_COLUMN_NAME).to(INVOKE)
-                      .set(LOAD_COLUMN_NAME).to(loadName)
+                      .set(RECORD_TYPE_COLUMN_NAME).to(INVOKE)
+                      .set(OP_NAME_COLUMN_NAME).to(loadName)
                       .set(VALUE_COLUMN_NAME).toStringArray(recordRepresentation)
                       .set(PID_COLUMN_NAME).to(processID).build()));
     } catch (SpannerException e) {
@@ -262,7 +263,7 @@ public class Executor {
    * @param representation
    */
   public void recordFail(String loadName, List<String> representation) {
-    recordList(loadName, representation, FAIL, /*staleness=*/0);
+    writeRecord(loadName, representation, FAIL, /*staleness=*/0);
   }
 
   /**
@@ -271,28 +272,28 @@ public class Executor {
    * @param representation
    */
   public void recordInfo(String loadName, List<String> representation) {
-    recordList(loadName, representation, INFO, /*staleness=*/0);
+    writeRecord(loadName, representation, INFO, /*staleness=*/0);
   }
 
 
   /**
-   * Helper function that inserts a history [loadName, representation, staleness] into the
-   * history table with the given opType (can be one of "invoke", "ok", "fail" or "info").
+   * Helper function that inserts a history [opName, representation, staleness] into the
+   * history table with the given recordType (can be one of "invoke", "ok", "fail" or "info").
    * Optional staleness will subtract staleness amount of milliseconds from the commit timestamp.
-   * @param loadName
+   * @param opName
    * @param representation
-   * @param opType
+   * @param recordType
    * @param staleness
    * @throws RuntimeException
    */
-  private Timestamp recordList(String loadName, List<String> representation, String opType,
-                          int staleness) throws RuntimeException {
+  private Timestamp writeRecord(String opName, List<String> representation, String recordType,
+                                int staleness) throws RuntimeException {
     try {
        Timestamp commitTimestamp =
                client.write(Collections.singletonList(Mutation.newInsertBuilder(HISTORY_TABLE_NAME)
                   .set(TIME_COLUMN_NAME).to(Value.COMMIT_TIMESTAMP)
-                  .set(OPTYPE_COLUMN_NAME).to(opType)
-                  .set(LOAD_COLUMN_NAME).to(loadName)
+                  .set(RECORD_TYPE_COLUMN_NAME).to(recordType)
+                  .set(OP_NAME_COLUMN_NAME).to(opName)
                   .set(VALUE_COLUMN_NAME).toStringArray(representation)
                   .set(PID_COLUMN_NAME).to(processID).build()));
       if (staleness != 0) {
@@ -303,12 +304,12 @@ public class Executor {
         client.write(Arrays.asList(
                 Mutation.newInsertBuilder(HISTORY_TABLE_NAME)
                         .set(TIME_COLUMN_NAME).to(staleTimestamp)
-                        .set(OPTYPE_COLUMN_NAME).to(opType)
-                        .set(LOAD_COLUMN_NAME).to(loadName)
+                        .set(RECORD_TYPE_COLUMN_NAME).to(recordType)
+                        .set(OP_NAME_COLUMN_NAME).to(opName)
                         .set(VALUE_COLUMN_NAME).toStringArray(representation)
                         .set(PID_COLUMN_NAME).to(processID).build(),
                 Mutation.delete(HISTORY_TABLE_NAME,
-                        Key.of(commitTimestamp, processID, opType, loadName))));
+                        Key.of(commitTimestamp, processID, recordType, opName))));
         return staleTimestamp;
       }
       return commitTimestamp;
@@ -321,7 +322,7 @@ public class Executor {
   }
 
   /**
-   * Given a key-vale mapping, insert it into the database. This function is intended to be used
+   * Given a key-value mapping, insert it into the database. This function is intended to be used
    * in initialization.
    * @param initialKVs
    */
@@ -347,8 +348,8 @@ public class Executor {
    */
   private Map<Keyword, Object> convertToMap(Struct row) {
     Map<Keyword, Object> record = new HashMap<>();
-    record.put(Keyword.newKeyword("type"), Keyword.newKeyword(row.getString(OPTYPE_COLUMN_NAME)));
-    record.put(Keyword.newKeyword("f"), Keyword.newKeyword(row.getString(LOAD_COLUMN_NAME)));
+    record.put(Keyword.newKeyword("type"), Keyword.newKeyword(row.getString(RECORD_TYPE_COLUMN_NAME)));
+    record.put(Keyword.newKeyword("f"), Keyword.newKeyword(row.getString(OP_NAME_COLUMN_NAME)));
     List<String> representation = row.getStringList(VALUE_COLUMN_NAME);
     String repr = Printers.printString(Printers.defaultPrinterProtocol(), representation);
     record.put(Keyword.newKeyword("value"), representation);
@@ -361,7 +362,7 @@ public class Executor {
    */
   public void extractHistory() {
     try (ResultSet resultSet = client.singleUse().read(HISTORY_TABLE_NAME, KeySet.all(),
-            Arrays.asList(OPTYPE_COLUMN_NAME, LOAD_COLUMN_NAME, VALUE_COLUMN_NAME,
+            Arrays.asList(RECORD_TYPE_COLUMN_NAME, OP_NAME_COLUMN_NAME, VALUE_COLUMN_NAME,
                     PID_COLUMN_NAME));
          FileWriter recordWriter = new FileWriter(RECORD_FILENAME)) {
       List<Map<Keyword, Object>> records = new ArrayList<>();

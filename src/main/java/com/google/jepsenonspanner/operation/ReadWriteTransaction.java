@@ -18,12 +18,12 @@ import java.util.function.Consumer;
  */
 public class ReadWriteTransaction extends OperationList {
 
-  private List<TransactionalOperation> ops;
+  private List<TransactionalOperation> spannerActions;
 
   public ReadWriteTransaction(String loadName, List<String> recordRepresentation,
-                              List<TransactionalOperation> ops) {
+                              List<TransactionalOperation> spannerActions) {
     super(loadName, recordRepresentation);
-    this.ops = ops;
+    this.spannerActions = spannerActions;
   }
 
   @Override
@@ -34,7 +34,7 @@ public class ReadWriteTransaction extends OperationList {
         Timestamp commitTimestamp = executor.runTxn(new Executor.TransactionFunction() {
           @Override
           public void run(TransactionContext transaction) {
-            for (TransactionalOperation op : ops) {
+            for (TransactionalOperation op : spannerActions) {
               long dependentValue = -1;
 
               // Iterate through all dependent operations and execute them first
@@ -69,7 +69,7 @@ public class ReadWriteTransaction extends OperationList {
 
   @VisibleForTesting
   /** ALL TESTING FUNCTIONS BELOW */
-  public List<TransactionalOperation> getOps() {
-    return Collections.unmodifiableList(ops);
+  public List<TransactionalOperation> getSpannerActions() {
+    return Collections.unmodifiableList(spannerActions);
   }
 }
