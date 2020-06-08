@@ -51,7 +51,7 @@ public class ReadWriteTransaction extends Operation {
               // Iterate through all dependent operations and execute them first
               for (; action != null; action = action.getDependentAction()) {
                 if (!action.decideProceed(dependentValue)) {
-                  throw new RuntimeException(String.format("Unable to proceed to dependent " +
+                  throw new OperationException(String.format("Unable to proceed to dependent " +
                           "action %s", String.valueOf(action)));
                   // abort the whole transaction if anything is determined as unable to proceed
                   // This will force Spanner to throw a ErrorCode.UNKNOWN exception
@@ -69,7 +69,7 @@ public class ReadWriteTransaction extends Operation {
         executor.recordComplete(getLoadName(), getRecordRepresentation(), commitTimestamp,
                 recordTimestamp);
       } catch (SpannerException e) {
-        if (e.getErrorCode() == ErrorCode.UNKNOWN && e.getCause() instanceof RuntimeException) {
+        if (e.getErrorCode() == ErrorCode.UNKNOWN && e.getCause() instanceof OperationException) {
           // The transaction function has thrown a RuntimeException, meaning that the transaction
           // fails; note that RuntimeException can also be thrown from executeTransactionalRead /
           // Write

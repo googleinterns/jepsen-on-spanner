@@ -9,6 +9,7 @@ import com.google.cloud.spanner.ResultSet;
 import com.google.cloud.spanner.SpannerException;
 import com.google.cloud.spanner.Struct;
 import com.google.cloud.spanner.TransactionContext;
+import com.google.jepsenonspanner.operation.OperationException;
 import org.apache.commons.lang3.tuple.Pair;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -22,6 +23,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ExecutorTest {
@@ -202,18 +204,29 @@ class ExecutorTest {
           for (String key : representation) {
             executor.executeTransactionalWrite(key, -1, transaction);
             if (Integer.parseInt(key) > 8)
-              throw new RuntimeException("Testing");
+              throw new OperationException("Testing");
           }
         }
       });
     } catch (SpannerException e) {
-      if (e.getErrorCode() == ErrorCode.UNKNOWN) {
+      if (e.getErrorCode() == ErrorCode.UNKNOWN && e.getCause() instanceof OperationException) {
         HashMap<String, Long> result = executor.readKeys(representation, 0, false).getLeft();
+        // current transaction aborted, should not observe any change
         assertEquals(result, kvs);
       } else {
         throw e.getCause();
       }
     }
+  }
+
+  @Test
+  void testInvalidReads() {
+    List<String> nonExistKeys = Collections.singletonList("NON_EXIST");
+    Exception e = assertThrows(OperationException.class, () -> {
+      executor.readKeys(nonExistKeys, 0, false);
+    });
+    assertTrue(e.getMessage().contains(String.format("Non-existent key found in read of %s",
+            nonExistKeys)));
   }
 
   @Test

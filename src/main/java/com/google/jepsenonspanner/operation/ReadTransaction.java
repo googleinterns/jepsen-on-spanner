@@ -80,7 +80,7 @@ public class ReadTransaction extends Operation {
                 recordTimestamp);
       } catch (SpannerException e) {
         executor.recordInfo(getLoadName(), getRecordRepresentation());
-      } catch (RuntimeException e) {
+      } catch (OperationException e) {
         executor.recordFail(getLoadName(), getRecordRepresentation());
       }
     };

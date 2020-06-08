@@ -23,6 +23,7 @@ import com.google.cloud.spanner.TransactionContext;
 import com.google.cloud.spanner.TransactionRunner;
 import com.google.cloud.spanner.Value;
 import com.google.common.annotations.VisibleForTesting;
+import com.google.jepsenonspanner.operation.OperationException;
 import com.google.spanner.admin.database.v1.CreateDatabaseMetadata;
 import org.apache.commons.lang3.tuple.Pair;
 import us.bpsm.edn.Keyword;
@@ -126,10 +127,10 @@ public class Executor {
    * Given a list of string as keys, returns a pair where the first element is the key-value
    * mapping read and the second element is the read timestamp. The staleness and bounded
    * parameters are used to achieve Exact Stale reads and Bounded Stale reads. If there is a
-   * non-existent key, throw a RuntimeException.
+   * non-existent key, throw a OperationException.
    */
   public Pair<HashMap<String, Long>, Timestamp> readKeys(List<String> keys, int staleness,
-                                                   boolean bounded) throws RuntimeException {
+                                                   boolean bounded) throws OperationException {
     HashMap<String, Long> result = new HashMap<>();
     KeySet.Builder keySetBuilder = KeySet.newBuilder();
     for (String key : keys) {
@@ -152,7 +153,7 @@ public class Executor {
         result.put(resultSet.getString(KEY_COLUMN_NAME), resultSet.getLong(VALUE_COLUMN_NAME));
       }
       if (result.size() != keys.size()) {
-        throw new RuntimeException(String.format("Non-existent key found in read of %s", keys));
+        throw new OperationException(String.format("Non-existent key found in read of %s", keys));
       }
       System.out.println(result.size());
     }
@@ -179,16 +180,16 @@ public class Executor {
   /**
    * Given a key, returns the result of a transactional read. This method must be used only within
    * the user-defined transaction function. If there is a non-existent key, throw a
-   * RuntimeException.
+   * OperationException.
    */
-  public long executeTransactionalRead(String key, TransactionContext transaction) throws RuntimeException {
+  public long executeTransactionalRead(String key, TransactionContext transaction) throws OperationException {
     // Using SQL interface so that all previous writes will be reflected in subsequent reads in
     // the same transaction; this is not the case for Mutation interface
     try (ResultSet resultSet = transaction.executeQuery(
             Statement.of(String.format("SELECT %s FROM %s WHERE %s = \"%s\"", VALUE_COLUMN_NAME,
                     TESTING_TABLE_NAME, KEY_COLUMN_NAME, key)))) {
       if (!resultSet.next()) {
-        throw new RuntimeException(String.format("Key %s not found on transactional read", key));
+        throw new OperationException(String.format("Key %s not found on transactional read", key));
       }
       return resultSet.getLong(VALUE_COLUMN_NAME);
     }
@@ -196,14 +197,14 @@ public class Executor {
 
   /**
    * Given a key and a value, write the key-value pair into the database. See above
-   * executeTransactionalRead. If there is a non-existent key, throw a RuntimeException.
+   * executeTransactionalRead. If there is a non-existent key, throw a OperationException.
    */
-  public void executeTransactionalWrite(String key, long value, TransactionContext transaction) throws RuntimeException {
+  public void executeTransactionalWrite(String key, long value, TransactionContext transaction) throws OperationException {
     long rowsModified = transaction.executeUpdate(
             Statement.of(String.format("UPDATE %s SET %s = %s WHERE %s = \"%s\"",
                     TESTING_TABLE_NAME, VALUE_COLUMN_NAME, value, KEY_COLUMN_NAME, key)));
     if (rowsModified != 1) {
-      throw new RuntimeException(String.format("Key %s not found on transactional write", key));
+      throw new OperationException(String.format("Key %s not found on transactional write", key));
     }
   }
 
