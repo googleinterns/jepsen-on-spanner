@@ -1,0 +1,7 @@
+.*
+!.gitignore
+build
+*gradle*
+lib
+*.edn
+
