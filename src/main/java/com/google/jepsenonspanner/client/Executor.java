@@ -53,6 +53,7 @@ public class Executor {
   private DatabaseAdminClient adminClient;
   private String instanceId;
   private String databaseId;
+  private String projectId;
   private Spanner spanner;
 
   // each executor will be assigned a unique ID
@@ -120,13 +121,16 @@ public class Executor {
     }
   }
 
-  public Executor(String instanceId, String dbId, int processID) {
+  public Executor(String projectId, String instanceId, String dbId, int processID, boolean init) {
     SpannerOptions options =
-            SpannerOptions.newBuilder().setProjectId("jepsen-on-spanner-with-gke").build();
+            SpannerOptions.newBuilder().setProjectId(projectId).build();
+    this.projectId = projectId;
     this.spanner = options.getService();
-    DatabaseId databaseId = DatabaseId.of(options.getProjectId(), instanceId, dbId);
-    this.client = spanner.getDatabaseClient(databaseId);
     this.adminClient = spanner.getDatabaseAdminClient();
+    if (!init) {
+      DatabaseId databaseId = DatabaseId.of(options.getProjectId(), instanceId, dbId);
+      this.client = spanner.getDatabaseClient(databaseId);
+    }
     this.processID = processID;
     this.instanceId = instanceId;
     this.databaseId = dbId;
@@ -153,10 +157,7 @@ public class Executor {
     try {
       System.out.println("Creating...");
       op.get();
-      if (op.isDone())
-        System.out.println("Done creating.");
-      else
-        System.out.println("Nope, not done yet");
+      this.client = spanner.getDatabaseClient(DatabaseId.of(projectId, instanceId, databaseId));
     } catch (ExecutionException e) {
       SpannerException se = (SpannerException) e.getCause();
       se.printStackTrace();

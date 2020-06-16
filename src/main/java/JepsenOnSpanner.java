@@ -83,7 +83,8 @@ public class JepsenOnSpanner {
     }
 
     System.out.println("Setting up connection with Spanenr...");
-    Executor executor = new Executor(instanceId, databaseId, processId);
+    Executor executor = new Executor("jepsen-on-spanner-with-gke", instanceId, databaseId,
+            processId, init);
     System.out.println("Done!");
     try {
       if (init) {
