@@ -35,7 +35,7 @@ public class BankVerifier implements Verifier {
     Parseable pbr = Parsers.newParseable(input);
     Parser parser = Parsers.newParser(Parsers.defaultConfiguration());
 
-    // parses the edn file to Java readable data structure
+    // parses the edn file to Java data structure
     List<Map<Keyword, Object>> records = (List<Map<Keyword, Object>>) parser.nextValue(pbr);
 
     try {
