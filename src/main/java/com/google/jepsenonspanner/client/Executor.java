@@ -403,7 +403,7 @@ public class Executor {
     List<String> representation = row.getStringList(VALUE_COLUMN_NAME);
     String repr = Printers.printString(Printers.defaultPrinterProtocol(), representation);
     record.put(Keyword.newKeyword("value"), representation);
-    record.put(Keyword.newKeyword("process"), processID);
+    record.put(Keyword.newKeyword("process"), row.getLong(PID_COLUMN_NAME));
     return record;
   }
 
