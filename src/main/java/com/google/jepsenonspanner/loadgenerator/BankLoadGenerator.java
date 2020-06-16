@@ -163,13 +163,13 @@ public class BankLoadGenerator extends LoadGenerator {
   private ReadTransaction boundedStaleRead() {
     return ReadTransaction.createBoundedStaleRead(READ_LOAD_NAME, getReadKeys(),
             rand.nextInt((int) Math.min(MAX_MILLISECOND_PAST,
-                    Math.max(System.currentTimeMillis() - startTime, 0))) + 1);
+                    Math.max(System.currentTimeMillis() - startTime, 1))) + 1);
   }
 
   private ReadTransaction exactStaleRead() {
     return ReadTransaction.createExactStaleRead(READ_LOAD_NAME, getReadKeys(),
             rand.nextInt((int) Math.min(MAX_MILLISECOND_PAST,
-                    Math.max(System.currentTimeMillis() - startTime, 0))) + 1);
+                    Math.max(System.currentTimeMillis() - startTime, 1))) + 1);
   }
 
   private ReadWriteTransaction transfer() {

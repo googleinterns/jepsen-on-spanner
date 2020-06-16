@@ -85,23 +85,27 @@ public class JepsenOnSpanner {
     System.out.println("Setting up connection with Spanenr...");
     Executor executor = new Executor(instanceId, databaseId, processId);
     System.out.println("Done!");
-    if (init) {
-      executor.createTables();
-      executor.initKeyValues(retrieveInitialState(path));
-    } else if (worker) {
-      LoadGenerator gen = new BankLoadGenerator(25, 100, 5);
-      while (gen.hasLoad()) {
-        Operation op = gen.nextOperation();
-        System.out.println("Generated op " + op.toString());
-        op.getExecutionPlan().accept(executor);
+    try {
+      if (init) {
+        executor.createTables();
+        executor.initKeyValues(retrieveInitialState(path));
+      } else if (worker) {
+        LoadGenerator gen = new BankLoadGenerator(5, 100, 3, new BankLoadGenerator.Config(1, 0, 0
+                , 1));
+        while (gen.hasLoad()) {
+          Operation op = gen.nextOperation();
+          System.out.println("Generated op " + op.toString());
+          op.getExecutionPlan().accept(executor);
+        }
+      } else if (verifier) {
+        executor.extractHistory();
+        Verifier v = new BankVerifier();
+        v.verify("history.edn", retrieveInitialState(path));
       }
-    } else if (verifier) {
-      executor.extractHistory();
-      Verifier v = new BankVerifier();
-      v.verify("history.edn", retrieveInitialState(path));
+    } finally {
+      executor.close();
     }
 
-    executor.close();
     System.out.println("DONE");
   }
 
