@@ -7,4 +7,7 @@ lib
 .gcloudignore
 *.yaml
 *.csv
-
+Dockerfile
+main.py
+src/main/java/JepsenOnSpanner.java
+src/test/java/com/google/jepsenonspanner/IntegratedTest.java
