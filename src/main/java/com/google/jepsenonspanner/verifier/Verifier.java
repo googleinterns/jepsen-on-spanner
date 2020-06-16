@@ -21,9 +21,9 @@ public interface Verifier {
 
 
   /**
-   * Given the path to a history file and a map of initial state of the database, check if the
+   * Given the path to a history file and a map of initial state of the database, checks if the
    * history file reflects a consistency error the benchmark is looking for. Returns false if
    * there is an error, and prints the location of the error to System.out.
    */
-  public boolean verify(String path, Map<String, Long> initialState);
+  public boolean verify(String filePath, Map<String, Long> initialState);
 }

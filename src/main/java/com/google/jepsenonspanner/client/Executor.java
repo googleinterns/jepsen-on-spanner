@@ -159,7 +159,6 @@ public class Executor {
         System.out.println("Nope, not done yet");
     } catch (ExecutionException e) {
       SpannerException se = (SpannerException) e.getCause();
-      se.printStackTrace();
       // If error code is ALREADY_EXISTS, other executors have created the initial tables already
       if (se.getErrorCode() != ErrorCode.ALREADY_EXISTS) {
         // otherwise throw error
@@ -378,8 +377,6 @@ public class Executor {
               .set(VALUE_COLUMN_NAME).to(kv.getValue()).build());
     }
 
-    int retryCount = 5;
-    int counter = 0;
     try {
       System.out.println("Writing...");
       client.write(mutations);

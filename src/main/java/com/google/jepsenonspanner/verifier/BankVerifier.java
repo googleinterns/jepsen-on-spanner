@@ -15,15 +15,24 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * A BankVerifier is part of the Bank Benchmark and checks that the balances read are consistent
+ * with the results of previous transfers. The sum of all accounts should be consistent.
+ * Specifically, the verifiers checks:
+ * - Whether a read reflects all previous successful transactions
+ * - Whether a successful transaction will result in negative balances
+ * - Whether a failed transaction should have failed due to insufficient balance
+ * - Whether a read reflects a failed transaction (it should not)
+ */
 public class BankVerifier implements Verifier {
   // Workloads specific to the bank benchmark
   private static Keyword READ = Keyword.newKeyword(BankLoadGenerator.READ_LOAD_NAME);
   private static Keyword TRANSFER = Keyword.newKeyword(BankLoadGenerator.TRANSFER_LOAD_NAME);
 
   @Override
-  public boolean verify(String path, Map<String, Long> state) {
+  public boolean verify(String filPath, Map<String, Long> state) {
     try {
-      FileReader fs = new FileReader(new File(path));
+      FileReader fs = new FileReader(new File(filPath));
       return verify(fs, state);
     } catch (FileNotFoundException e) {
       throw new RuntimeException("Invalid file");
@@ -31,7 +40,8 @@ public class BankVerifier implements Verifier {
   }
 
   @VisibleForTesting
-  boolean verify(Readable input, Map<String, Long> state) {
+  boolean verify(Readable input, Map<String, Long> initalState) {
+    HashMap<String, Long> state = new HashMap<>(initalState);
     Parseable pbr = Parsers.newParseable(input);
     Parser parser = Parsers.newParser(Parsers.defaultConfiguration());
 
@@ -67,6 +77,9 @@ public class BankVerifier implements Verifier {
       checkOkRead(value, state);
     } else if (opName.equals(TRANSFER)) {
       checkOkTransfer(value, state);
+    } else {
+      // Invalid operation name
+      throw new VerifierException(opName.getName(), value);
     }
   }
 
