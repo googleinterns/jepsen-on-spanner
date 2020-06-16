@@ -107,12 +107,17 @@ public class BankVerifier implements Verifier {
    *              account "0" to account "1"
    * @param state a map of current state given all previous records
    */
-  private void checkOkTransfer(List<String> value, Map<String, Long> state) {
+  private void checkOkTransfer(List<String> value, Map<String, Long> state)
+          throws VerifierException {
     String[] transferParams = value.get(0).split(" ");
     String fromAcct = transferParams[0];
     String toAcct = transferParams[1];
     long amount = Long.parseLong(transferParams[2]);
-    state.put(fromAcct, state.get(fromAcct) - amount);
+    long fromAcctBalance = state.get(fromAcct);
+    if (fromAcctBalance < amount) {
+      throw new VerifierException(TRANSFER.getName(), value);
+    }
+    state.put(fromAcct, fromAcctBalance - amount);
     state.put(toAcct, state.get(toAcct) + amount);
   }
 

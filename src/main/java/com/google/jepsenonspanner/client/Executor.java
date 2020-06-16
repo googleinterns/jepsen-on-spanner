@@ -53,6 +53,7 @@ public class Executor {
   private DatabaseAdminClient adminClient;
   private String instanceId;
   private String databaseId;
+  private String projectId;
   private Spanner spanner;
 
   // each executor will be assigned a unique ID
@@ -120,12 +121,16 @@ public class Executor {
     }
   }
 
-  public Executor(String instanceId, String dbId, int processID) {
+  public Executor(String projectId, String instanceId, String dbId, int processID, boolean init) {
     SpannerOptions options =
-            SpannerOptions.newBuilder().setProjectId("jepsen-on-spanner-with-gke").build();
+            SpannerOptions.newBuilder().setProjectId(projectId).build();
+    this.projectId = projectId;
     this.spanner = options.getService();
-    DatabaseId databaseId = DatabaseId.of(options.getProjectId(), instanceId, dbId);
-    this.client = spanner.getDatabaseClient(databaseId);
+    if (!init) {
+      // The database with this id is already created, we can initialize the database client
+      DatabaseId databaseId = DatabaseId.of(options.getProjectId(), instanceId, dbId);
+      this.client = spanner.getDatabaseClient(databaseId);
+    }
     this.adminClient = spanner.getDatabaseAdminClient();
     this.processID = processID;
     this.instanceId = instanceId;
@@ -151,12 +156,9 @@ public class Executor {
                             ") PRIMARY KEY(" + KEY_COLUMN_NAME + ")\n"));
 
     try {
-      System.out.println("Creating...");
       op.get();
-      if (op.isDone())
-        System.out.println("Done creating.");
-      else
-        System.out.println("Nope, not done yet");
+      // initialize the database client
+      this.client = spanner.getDatabaseClient(DatabaseId.of(projectId, instanceId, databaseId));
     } catch (ExecutionException e) {
       SpannerException se = (SpannerException) e.getCause();
       // If error code is ALREADY_EXISTS, other executors have created the initial tables already
