@@ -7,5 +7,4 @@ lib
 .gcloudignore
 *.yaml
 *.csv
-Dockerfile
 
