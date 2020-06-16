@@ -27,7 +27,7 @@ class BankVerifierTest {
   @Test
   void verify() {
     BankVerifier verifier = new BankVerifier();
-    String input = "[{:type :invoke, :f :read, :value []}]";
+    String input = "[{:type :invoke, :f :read, :value [\"0\" \"1\"]}]";
     verifier.verify(new StringReader(input), state);
   }
 }
