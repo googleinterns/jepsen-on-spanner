@@ -2,7 +2,6 @@ package com.google.jepsenonspanner.client;
 
 import com.google.cloud.Timestamp;
 import com.google.cloud.spanner.ErrorCode;
-import com.google.cloud.spanner.Key;
 import com.google.cloud.spanner.KeySet;
 import com.google.cloud.spanner.Mutation;
 import com.google.cloud.spanner.ResultSet;
@@ -91,7 +90,7 @@ class ExecutorTest {
   }
 
   void checkFailOrInfo(String opType) {
-    if (opType == Executor.FAIL)
+    if (opType == Executor.FAIL_STR)
       executor.recordFail(LOAD_NAME, representation);
     else
       executor.recordInfo(LOAD_NAME, representation);
@@ -113,7 +112,7 @@ class ExecutorTest {
       List<Timestamp> timestamps = new ArrayList<>();
       while (resultSet.next()) {
         checkSingleRecord(resultSet.getCurrentRowAsStruct(),
-                Executor.INVOKE); // Do not test for timestamp here
+                Executor.INVOKE_STR); // Do not test for timestamp here
         timestamps.add(resultSet.getTimestamp(Executor.TIME_COLUMN_NAME));
       }
       assertEquals(timestamps.size(), 2);
@@ -134,9 +133,9 @@ class ExecutorTest {
 
     try (ResultSet resultSet = retrieveAllRecords()) {
       resultSet.next();
-      checkSingleRecord(resultSet.getCurrentRowAsStruct(), Executor.INVOKE, commitTimestamp);
+      checkSingleRecord(resultSet.getCurrentRowAsStruct(), Executor.INVOKE_STR, commitTimestamp);
       resultSet.next();
-      checkSingleRecord(resultSet.getCurrentRowAsStruct(), Executor.OK, commitTimestamp);
+      checkSingleRecord(resultSet.getCurrentRowAsStruct(), Executor.OK_STR, commitTimestamp);
     }
   }
 
@@ -152,12 +151,12 @@ class ExecutorTest {
 
   @Test
   void testRecordFail() {
-    checkFailOrInfo(Executor.FAIL);
+    checkFailOrInfo(Executor.FAIL_STR);
   }
 
   @Test
   void testRecordInfo() {
-    checkFailOrInfo(Executor.INFO);
+    checkFailOrInfo(Executor.INFO_STR);
   }
 
   @Test

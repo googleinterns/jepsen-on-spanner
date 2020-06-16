@@ -51,4 +51,9 @@ public abstract class Operation {
     return this.loadName.equals(otherOps.loadName)
             && this.recordRepresentation.equals(otherOps.recordRepresentation);
   }
+
+  @Override
+  public String toString() {
+    return loadName + " " + recordRepresentation;
+  }
 }

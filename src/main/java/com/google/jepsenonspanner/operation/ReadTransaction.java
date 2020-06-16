@@ -64,9 +64,9 @@ public class ReadTransaction extends Operation {
   @Override
   public Consumer<Executor> getExecutionPlan() {
     return executor -> {
+      Timestamp recordTimestamp = executor.recordInvoke(getLoadName(), getRecordRepresentation(),
+              staleness);
       try {
-        Timestamp recordTimestamp = executor.recordInvoke(getLoadName(), getRecordRepresentation(),
-                staleness);
         Pair<HashMap<String, Long>, Timestamp> result = executor.readKeys(keys, staleness, bounded);
         HashMap<String, Long> keyValues = result.getLeft();
         Timestamp readTimeStamp = result.getRight();
@@ -81,9 +81,18 @@ public class ReadTransaction extends Operation {
       } catch (SpannerException e) {
         executor.recordInfo(getLoadName(), getRecordRepresentation());
       } catch (OperationException e) {
-        executor.recordFail(getLoadName(), getRecordRepresentation());
+        if (staleness == 0) {
+          executor.recordFail(getLoadName(), getRecordRepresentation());
+        } else {
+          executor.recordFail(getLoadName(), getRecordRepresentation(), recordTimestamp);
+        }
       }
     };
+  }
+
+  @Override
+  public String toString() {
+    return super.toString() + " " + staleness + " " + (bounded ? "bounded" : "exact");
   }
 
   /** ALL TESTING FUNCTIONS BELOW */
