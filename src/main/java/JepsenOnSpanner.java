@@ -14,21 +14,23 @@ import java.util.HashMap;
 import java.util.stream.Stream;
 
 public class JepsenOnSpanner {
-  private static final String ERROR_MSG = "Usage: test --instance [instanceId] --database " +
-          "[databaseId] --component [INIT / WORKER / VERIFIER] --pID [process ID] " +
-          "--initial-values [path to initial values as csv]";
+  private static final String ERROR_MSG = "Usage: java -jar Jepsen-on-spanner.jar --project " +
+          "[projectId] --instance [instanceId] --database [databaseId] --component [INIT / WORKER" +
+          " / VERIFIER] --pID [process ID] --initial-values [path to initial values as csv] " +
+          "--config-path [path to config json file]";
 
   public static void main(String[] args) {
-//    Executor executor = new Executor(INSTANCE_ID)
     boolean init = false;
     boolean worker = false;
     boolean verifier = false;
     String instanceId = null;
     String databaseId = null;
+    String projectId = null;
     int processId = -1;
-    String path = null;
+    String initValuePath = null;
+    String configPath = null;
 
-    if (args.length != 8 && args.length != 10) {
+    if (args.length != 12) {
       System.out.println(ERROR_MSG);
       return;
     }
@@ -42,6 +44,10 @@ public class JepsenOnSpanner {
         case "--database":
         case "-d":
           databaseId = args[++i];
+          break;
+        case "--project":
+        case "-p":
+          projectId = args[++i];
           break;
         case "--component":
         case "-c":
@@ -65,8 +71,15 @@ public class JepsenOnSpanner {
           processId = Integer.parseInt(args[++i]);
           break;
         case "--initial-values":
-          path = args[++i];
-          if (!path.endsWith(".csv")) {
+          initValuePath = args[++i];
+          if (!initValuePath.endsWith(".csv")) {
+            System.out.println(ERROR_MSG);
+            return;
+          }
+          break;
+        case "--config-path":
+          configPath = args[++i];
+          if (!configPath.endsWith(".json")) {
             System.out.println(ERROR_MSG);
             return;
           }
@@ -77,22 +90,21 @@ public class JepsenOnSpanner {
       }
     }
 
-    if (instanceId == null || databaseId == null || (init && path == null)) {
+    if (instanceId == null || databaseId == null || projectId == null ||
+            (!worker && initValuePath == null) || (worker && configPath == null)) {
       System.out.println(ERROR_MSG);
       return;
     }
 
     System.out.println("Setting up connection with Spanenr...");
-    Executor executor = new Executor("jepsen-on-spanner-with-gke", instanceId, databaseId,
-            processId, init);
+    Executor executor = new Executor(projectId, instanceId, databaseId, processId, init);
     System.out.println("Done!");
     try {
       if (init) {
         executor.createTables();
-        executor.initKeyValues(retrieveInitialState(path));
+        executor.initKeyValues(retrieveInitialState(initValuePath));
       } else if (worker) {
-        LoadGenerator gen = new BankLoadGenerator(5, 100, 3, new BankLoadGenerator.Config(1, 0, 0
-                , 1));
+        LoadGenerator gen = BankLoadGenerator.createGeneratorFromConfig(configPath);
         while (gen.hasLoad()) {
           Operation op = gen.nextOperation();
           System.out.println("Generated op " + op.toString());
@@ -101,7 +113,7 @@ public class JepsenOnSpanner {
       } else if (verifier) {
         executor.extractHistory();
         Verifier v = new BankVerifier();
-        v.verify("history.edn", retrieveInitialState(path));
+        v.verify("history.edn", retrieveInitialState(initValuePath));
       }
     } finally {
       executor.close();

@@ -6,8 +6,9 @@ import time
 os.system("./gradlew shadowJar")
 os.system("gcloud builds submit --tag gcr.io/jepsen-on-spanner-with-gke/jepsen-on-spanner .")
 
-os.system("java -jar ./build/libs/Jepsen-on-spanner-1.0-SNAPSHOT-all.jar --instance jepsen "
-                "--database test --component INIT --pID 0 --initial-values init.csv")
+os.system("java -jar ./build/libs/Jepsen-on-spanner-1.0-SNAPSHOT-all.jar --project "
+          "jepsen-on-spanner-with-gke --instance jepsen --database test --component INIT --pID 0 "
+          "--initial-values init.csv")
 
 os.system("mkdir ./jobs")
 for i in range(1, 4):
@@ -30,8 +31,9 @@ while in_progress:
             time.sleep(3)
             break
 
-os.system("java -jar ./build/libs/Jepsen-on-spanner-1.0-SNAPSHOT-all.jar --instance jepsen "
-                "--database test --component VERIFIER --pID 0 --initial-values init.csv")
+os.system("java -jar ./build/libs/Jepsen-on-spanner-1.0-SNAPSHOT-all.jar --project "
+          "jepsen-on-spanner-with-gke --instance jepsen --database test --component VERIFIER "
+          "--pID 0 --initial-values init.csv")
 
 for i in range(1, 4):
     os.system(f"kubectl delete job test-worker-{i}")

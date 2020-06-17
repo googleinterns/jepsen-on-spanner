@@ -1,4 +1,6 @@
 {
-  "op-limit": 10,
-  "max-balance":
+  "opLimit": 10,
+  "maxBalance": 60,
+  "acctNumber": 3,
+  "opRatio": "2 1 1 2"
 }
