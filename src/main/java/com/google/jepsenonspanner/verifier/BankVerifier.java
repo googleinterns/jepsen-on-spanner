@@ -30,9 +30,9 @@ public class BankVerifier implements Verifier {
   private static Keyword TRANSFER = Keyword.newKeyword(BankLoadGenerator.TRANSFER_LOAD_NAME);
 
   @Override
-  public boolean verify(String filPath, Map<String, Long> state) {
+  public boolean verify(String filePath, Map<String, Long> state) {
     try {
-      FileReader fs = new FileReader(new File(filPath));
+      FileReader fs = new FileReader(new File(filePath));
       return verify(fs, state);
     } catch (FileNotFoundException e) {
       throw new RuntimeException("Invalid file");
@@ -40,8 +40,8 @@ public class BankVerifier implements Verifier {
   }
 
   @VisibleForTesting
-  boolean verify(Readable input, Map<String, Long> initalState) {
-    HashMap<String, Long> state = new HashMap<>(initalState);
+  boolean verify(Readable input, Map<String, Long> initialState) {
+    HashMap<String, Long> state = new HashMap<>(initialState);
     Parseable pbr = Parsers.newParseable(input);
     Parser parser = Parsers.newParser(Parsers.defaultConfiguration());
 
@@ -94,7 +94,11 @@ public class BankVerifier implements Verifier {
     Map<String, Long> currentState = new HashMap<>();
     for (String representation : value) {
       String[] keyValues = representation.split(" ");
-      currentState.put(keyValues[0], Long.parseLong(keyValues[1]));
+      long balance = Long.parseLong(keyValues[1]);
+      if (balance < 0) {
+        throw new VerifierException(READ.getName(), value);
+      }
+      currentState.put(keyValues[0], balance);
     }
     if (!currentState.equals(state)) {
       throw new VerifierException(READ.getName(), value);
