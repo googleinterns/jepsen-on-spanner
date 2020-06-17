@@ -50,6 +50,11 @@ public class Executor {
 
   // maintain connection with the Spanner instance
   private DatabaseClient client;
+  private DatabaseAdminClient adminClient;
+  private String instanceId;
+  private String databaseId;
+  private String projectId;
+  private Spanner spanner;
 
   // each executor will be assigned a unique ID
   private int processID;
@@ -62,10 +67,10 @@ public class Executor {
   public static final String TIME_COLUMN_NAME = "Time";
   public static final String PID_COLUMN_NAME = "ProcessID";
   public static final String OP_NAME_COLUMN_NAME = "Load";
-  public static final String INVOKE = "invoke";
-  public static final String OK = "ok";
-  public static final String FAIL = "fail";
-  public static final String INFO = "info";
+  public static final String INVOKE_STR = "invoke";
+  public static final String OK_STR = "ok";
+  public static final String FAIL_STR = "fail";
+  public static final String INFO_STR = "info";
   public static final String RECORD_FILENAME = "history.edn";
   public static final String RECORDER_ERROR = "RECORDER ERROR";
 
@@ -84,26 +89,67 @@ public class Executor {
     void run(TransactionContext transaction);
   }
 
-  public Executor(String instanceId, String dbId, int processID) {
-    SpannerOptions options = SpannerOptions.newBuilder().build();
-    Spanner spanner = options.getService();
-    DatabaseId databaseId = DatabaseId.of(options.getProjectId(), instanceId, dbId);
-    this.client = spanner.getDatabaseClient(databaseId);
-    DatabaseAdminClient adminClient = spanner.getDatabaseAdminClient();
-    this.processID = processID;
+  private enum RecordType {
+    INVOKE (0),
+    OK     (1),
+    FAIL   (2),
+    INFO   (3);
 
+    private final int code;
+
+    private RecordType(int code) {
+      this.code = code;
+    }
+
+    public int getCode() {
+      return code;
+    }
+  }
+
+  private String recordCodeToString(int code) throws RuntimeException {
+    switch (code) {
+      case 0:
+        return INVOKE_STR;
+      case 1:
+        return OK_STR;
+      case 2:
+        return FAIL_STR;
+      case 3:
+        return INFO_STR;
+      default:
+        throw new RuntimeException(RECORDER_ERROR);
+    }
+  }
+
+  public Executor(String projectId, String instanceId, String dbId, int processID, boolean init) {
+    SpannerOptions options =
+            SpannerOptions.newBuilder().setProjectId(projectId).build();
+    this.projectId = projectId;
+    this.spanner = options.getService();
+    if (!init) {
+      // The database with this id is already created, we can initialize the database client
+      DatabaseId databaseId = DatabaseId.of(options.getProjectId(), instanceId, dbId);
+      this.client = spanner.getDatabaseClient(databaseId);
+    }
+    this.adminClient = spanner.getDatabaseAdminClient();
+    this.processID = processID;
+    this.instanceId = instanceId;
+    this.databaseId = dbId;
+  }
+
+  public void createTables() {
     // create the initial tables for history
     OperationFuture<Database, CreateDatabaseMetadata> op =
-            adminClient.createDatabase(instanceId, dbId, Arrays.asList(
+            adminClient.createDatabase(instanceId, databaseId, Arrays.asList(
                     "CREATE TABLE " + HISTORY_TABLE_NAME + " (\n" +
                             "    " + TIME_COLUMN_NAME + "   TIMESTAMP NOT NULL\n" +
                             "    OPTIONS (allow_commit_timestamp = true),\n" +
-                            "    " + RECORD_TYPE_COLUMN_NAME + " STRING(6) NOT NULL,\n" +
+                            "    " + RECORD_TYPE_COLUMN_NAME + " INT64 NOT NULL,\n" +
                             "    " + OP_NAME_COLUMN_NAME + "   STRING(MAX) NOT NULL,\n" +
                             "    " + VALUE_COLUMN_NAME + "  ARRAY<STRING(MAX)>,\n" +
                             "    " + PID_COLUMN_NAME + "    INT64 NOT NULL,\n" +
                             ") PRIMARY KEY(" + TIME_COLUMN_NAME + ", " + PID_COLUMN_NAME + ", " +
-                            RECORD_TYPE_COLUMN_NAME + ", " + OP_NAME_COLUMN_NAME + ")",
+                            OP_NAME_COLUMN_NAME + ", " + RECORD_TYPE_COLUMN_NAME + ")",
                     "CREATE TABLE " + TESTING_TABLE_NAME + " (\n" +
                             "    " + KEY_COLUMN_NAME + "   STRING(MAX) NOT NULL,\n" +
                             "    " + VALUE_COLUMN_NAME + " INT64 NOT NULL,\n" +
@@ -111,6 +157,8 @@ public class Executor {
 
     try {
       op.get();
+      // initialize the database client
+      this.client = spanner.getDatabaseClient(DatabaseId.of(projectId, instanceId, databaseId));
     } catch (ExecutionException e) {
       SpannerException se = (SpannerException) e.getCause();
       // If error code is ALREADY_EXISTS, other executors have created the initial tables already
@@ -119,6 +167,7 @@ public class Executor {
         throw se;
       }
     } catch (InterruptedException e) {
+      e.printStackTrace();
       throw SpannerExceptionFactory.propagateInterrupt(e);
     }
   }
@@ -155,7 +204,6 @@ public class Executor {
       if (result.size() != keys.size()) {
         throw new OperationException(String.format("Non-existent key found in read of %s", keys));
       }
-      System.out.println(result.size());
     }
     return Pair.of(result, txn.getReadTimestamp());
   }
@@ -214,7 +262,7 @@ public class Executor {
    * of this record.
    */
   public Timestamp recordInvoke(String opName, List<String> representation, int staleness) {
-    return writeRecord(opName, representation, INVOKE, staleness);
+    return writeRecord(opName, representation, RecordType.INVOKE, staleness);
   }
 
   /**
@@ -235,19 +283,21 @@ public class Executor {
       client.write(Arrays.asList(
               Mutation.newInsertBuilder(HISTORY_TABLE_NAME)
                       .set(TIME_COLUMN_NAME).to(commitTimestamp)
-                      .set(RECORD_TYPE_COLUMN_NAME).to(OK)
+                      .set(RECORD_TYPE_COLUMN_NAME).to(RecordType.OK.getCode())
                       .set(OP_NAME_COLUMN_NAME).to(opName)
                       .set(VALUE_COLUMN_NAME).toStringArray(recordRepresentation)
                       .set(PID_COLUMN_NAME).to(processID).build(),
-              Mutation.delete(HISTORY_TABLE_NAME, Key.of(invokeTimestamp, processID, INVOKE,
-                      opName)), // delete the old invoke record first, since key cannot be updated
+              Mutation.delete(HISTORY_TABLE_NAME, Key.of(invokeTimestamp, processID,
+                      opName, RecordType.INVOKE.getCode())),
+              // delete the old invoke record first, since key cannot be updated
               Mutation.newInsertBuilder(HISTORY_TABLE_NAME)
                       .set(TIME_COLUMN_NAME).to(commitTimestamp)
-                      .set(RECORD_TYPE_COLUMN_NAME).to(INVOKE)
+                      .set(RECORD_TYPE_COLUMN_NAME).to(RecordType.INVOKE.getCode())
                       .set(OP_NAME_COLUMN_NAME).to(opName)
                       .set(VALUE_COLUMN_NAME).toStringArray(recordRepresentation)
                       .set(PID_COLUMN_NAME).to(processID).build()));
     } catch (SpannerException e) {
+      e.printStackTrace();
       throw new RuntimeException(RECORDER_ERROR);
     }
   }
@@ -256,14 +306,19 @@ public class Executor {
    * Records a fail history.
    */
   public void recordFail(String opName, List<String> representation) {
-    writeRecord(opName, representation, FAIL, /*staleness=*/0);
+    writeRecord(opName, representation, RecordType.FAIL, /*staleness=*/0);
+  }
+
+  public void recordFail(String opName, List<String> representation,
+                              Timestamp staleTimestamp) {
+    writeRecord(opName, representation, RecordType.FAIL, /*staleness=*/0, staleTimestamp);
   }
 
   /**
    * Records an info history.
    */
   public void recordInfo(String opName, List<String> representation) {
-    writeRecord(opName, representation, INFO, /*staleness=*/0);
+    writeRecord(opName, representation, RecordType.INFO, /*staleness=*/0);
   }
 
 
@@ -272,13 +327,13 @@ public class Executor {
    * history table with the given recordType (can be one of "invoke", "ok", "fail" or "info").
    * Optional staleness will subtract staleness amount of milliseconds from the commit timestamp.
    */
-  private Timestamp writeRecord(String opName, List<String> representation, String recordType,
-                                int staleness) throws RuntimeException {
+  private Timestamp writeRecord(String opName, List<String> representation, RecordType recordType,
+                                int staleness, Timestamp timestamp) throws RuntimeException {
     try {
        Timestamp commitTimestamp =
                client.write(Collections.singletonList(Mutation.newInsertBuilder(HISTORY_TABLE_NAME)
-                  .set(TIME_COLUMN_NAME).to(Value.COMMIT_TIMESTAMP)
-                  .set(RECORD_TYPE_COLUMN_NAME).to(recordType)
+                  .set(TIME_COLUMN_NAME).to(timestamp)
+                  .set(RECORD_TYPE_COLUMN_NAME).to(recordType.getCode())
                   .set(OP_NAME_COLUMN_NAME).to(opName)
                   .set(VALUE_COLUMN_NAME).toStringArray(representation)
                   .set(PID_COLUMN_NAME).to(processID).build()));
@@ -290,12 +345,12 @@ public class Executor {
         client.write(Arrays.asList(
                 Mutation.newInsertBuilder(HISTORY_TABLE_NAME)
                         .set(TIME_COLUMN_NAME).to(staleTimestamp)
-                        .set(RECORD_TYPE_COLUMN_NAME).to(recordType)
+                        .set(RECORD_TYPE_COLUMN_NAME).to(recordType.getCode())
                         .set(OP_NAME_COLUMN_NAME).to(opName)
                         .set(VALUE_COLUMN_NAME).toStringArray(representation)
                         .set(PID_COLUMN_NAME).to(processID).build(),
                 Mutation.delete(HISTORY_TABLE_NAME,
-                        Key.of(commitTimestamp, processID, recordType, opName))));
+                        Key.of(commitTimestamp, processID, opName, recordType.getCode()))));
         return staleTimestamp;
       }
       return commitTimestamp;
@@ -305,6 +360,11 @@ public class Executor {
       e.printStackTrace();
       throw new RuntimeException(RECORDER_ERROR);
     }
+  }
+
+  private Timestamp writeRecord(String opName, List<String> representation, RecordType recordType,
+                                int staleness) throws RuntimeException {
+    return writeRecord(opName, representation, recordType, staleness, Value.COMMIT_TIMESTAMP);
   }
 
   /**
@@ -318,10 +378,15 @@ public class Executor {
               .set(KEY_COLUMN_NAME).to(kv.getKey())
               .set(VALUE_COLUMN_NAME).to(kv.getValue()).build());
     }
+
     try {
+      System.out.println("Writing...");
       client.write(mutations);
+      System.out.println("Done writing.");
     } catch (SpannerException e) {
       System.out.println(e.getMessage());
+      e.printStackTrace();
+      System.out.println(e.toString());
       throw new RuntimeException(RECORDER_ERROR);
     }
   }
@@ -331,7 +396,8 @@ public class Executor {
    */
   private Map<Keyword, Object> convertToMap(Struct row) {
     Map<Keyword, Object> record = new HashMap<>();
-    record.put(Keyword.newKeyword("type"), Keyword.newKeyword(row.getString(RECORD_TYPE_COLUMN_NAME)));
+    record.put(Keyword.newKeyword("type"),
+            Keyword.newKeyword(recordCodeToString((int) row.getLong(RECORD_TYPE_COLUMN_NAME))));
     record.put(Keyword.newKeyword("f"), Keyword.newKeyword(row.getString(OP_NAME_COLUMN_NAME)));
     List<String> representation = row.getStringList(VALUE_COLUMN_NAME);
     String repr = Printers.printString(Printers.defaultPrinterProtocol(), representation);
@@ -357,6 +423,14 @@ public class Executor {
     } catch (IOException e) {
       throw new RuntimeException(RECORDER_ERROR);
     }
+  }
+
+  public void cleanUp() {
+    adminClient.dropDatabase(instanceId, databaseId);
+  }
+
+  public void close() {
+    spanner.close();
   }
 
   /** For testing; returns the client under the hood. */

@@ -4,4 +4,8 @@ build
 *gradle*
 lib
 *.edn
-
+.gcloudignore
+*.yaml
+*.csv
+Dockerfile
+*.json

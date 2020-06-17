@@ -5,6 +5,7 @@ import com.google.jepsenonspanner.operation.ReadTransaction;
 import com.google.jepsenonspanner.operation.ReadWriteTransaction;
 import com.google.jepsenonspanner.operation.TransactionalAction;
 
+import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -70,8 +71,9 @@ public class BankLoadGenerator extends LoadGenerator {
   private Random rand;
   private int randSeed;
   private Config config;
+  private long startTime;
 
-  private static final int MAX_MILLISECOND_PAST = 5 * 60 * 1000; // 5 minutes
+  private static final long MAX_MILLISECOND_PAST = 5 * 60 * 1000; // 5 minutes
   public static final String READ_LOAD_NAME = "read";
   public static final String TRANSFER_LOAD_NAME = "transfer";
 
@@ -93,6 +95,7 @@ public class BankLoadGenerator extends LoadGenerator {
     this.acctNumber = acctNumber;
     this.rand = new Random(seed);
     this.config = config;
+    this.startTime = System.currentTimeMillis();
   }
 
   /**
@@ -159,12 +162,14 @@ public class BankLoadGenerator extends LoadGenerator {
 
   private ReadTransaction boundedStaleRead() {
     return ReadTransaction.createBoundedStaleRead(READ_LOAD_NAME, getReadKeys(),
-            rand.nextInt(MAX_MILLISECOND_PAST) + 1);
+            rand.nextInt((int) Math.min(MAX_MILLISECOND_PAST,
+                    Math.max(System.currentTimeMillis() - startTime, 0))) + 1);
   }
 
   private ReadTransaction exactStaleRead() {
     return ReadTransaction.createExactStaleRead(READ_LOAD_NAME, getReadKeys(),
-            rand.nextInt(MAX_MILLISECOND_PAST) + 1);
+            rand.nextInt((int) Math.min(MAX_MILLISECOND_PAST,
+                    Math.max(System.currentTimeMillis() - startTime, 0))) + 1);
   }
 
   private ReadWriteTransaction transfer() {
@@ -178,7 +183,7 @@ public class BankLoadGenerator extends LoadGenerator {
     transaction.add(TransactionalAction.createTransactionalRead(acct2));
 
     // add the dependent write operations
-    int transferAmount = rand.nextInt(this.maxBalance) + 1;
+    int transferAmount = rand.nextInt(this.maxBalance / this.acctNumber) + 1;
     TransactionalAction acct1Write =
             TransactionalAction.createDependentTransactionalWrite(acct1, transferAmount,
                     (balance, transfer) -> balance - transfer,
