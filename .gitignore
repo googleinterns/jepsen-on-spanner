@@ -8,3 +8,4 @@ lib
 *.yaml
 *.csv
 Dockerfile
+*.json

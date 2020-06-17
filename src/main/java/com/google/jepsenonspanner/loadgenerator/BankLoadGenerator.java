@@ -153,6 +153,7 @@ public class BankLoadGenerator extends LoadGenerator {
               new Config(Integer.parseInt(configRatios[0]), Integer.parseInt(configRatios[1]),
                       Integer.parseInt(configRatios[2]), Integer.parseInt(configRatios[3])));
     } catch (FileNotFoundException | ClassCastException e) {
+      e.printStackTrace();
       throw new RuntimeException(ERR_MSG + configPath);
     }
   }
