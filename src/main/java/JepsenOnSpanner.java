@@ -109,6 +109,7 @@ public class JepsenOnSpanner {
           Operation op = gen.nextOperation();
           System.out.println("Generated op " + op.toString());
           op.getExecutionPlan().accept(executor);
+          System.out.println("Op " + op.toString() + " done");
         }
       } else if (verifier) {
         executor.extractHistory();

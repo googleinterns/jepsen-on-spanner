@@ -7,6 +7,9 @@ public class TransactionalAction {
 
   private String key;
   private long value;
+
+  // the value that will be used to calculate dependent value e.g. transfer amount in a transfer
+  private long knownValue;
   
   // true means read, false means write
   public enum Type {
@@ -35,10 +38,10 @@ public class TransactionalAction {
    * @param findDependValFunc
    * @param decideProceedFunc   
    */
-  public TransactionalAction(String key, int value, Type actionType,
+  public TransactionalAction(String key, int value, int knownValue, Type actionType,
                              BinaryOperator<Long> findDependValFunc,
                              BiPredicate<Long, Long> decideProceedFunc) {
-    this(key, value, actionType, null, findDependValFunc, decideProceedFunc);
+    this(key, -1, value, actionType, null, findDependValFunc, decideProceedFunc);
   }
 
   /**
@@ -48,7 +51,7 @@ public class TransactionalAction {
    * @param actionType
    */
   public TransactionalAction(String key, int value, Type actionType) {
-    this(key, value, actionType, null, null, null);
+    this(key, value, -1, actionType, null, null, null);
   }
 
   /**
@@ -60,12 +63,13 @@ public class TransactionalAction {
    * @param findDependValFunc
    * @param decideProceedFunc
    */
-  public TransactionalAction(String key, int value, Type actionType,
+  public TransactionalAction(String key, int value, int knownValue, Type actionType,
                              TransactionalAction dependent,
                              BinaryOperator<Long> findDependValFunc,
                              BiPredicate<Long, Long> decideProceedFunc) {
     this.key = key;
     this.value = value;
+    this.knownValue = knownValue;
     this.actionType = actionType;
     this.dependent = dependent;
     this.findDependValFunc = findDependValFunc;
@@ -73,17 +77,18 @@ public class TransactionalAction {
   }
   
   public static TransactionalAction createTransactionalRead(String key) {
-    return new TransactionalAction(key, 0, Type.READ, null, null, null);
+    return new TransactionalAction(key, -1, -1, Type.READ, null, null, null);
   }
 
   public static TransactionalAction createTransactionalWrite(String key, int value) {
-    return new TransactionalAction(key, value, Type.WRITE, null, null, null);
+    return new TransactionalAction(key, value, -1, Type.WRITE, null, null, null);
   }
 
   public static TransactionalAction createDependentTransactionalWrite(String key, int value,
                                                                       BinaryOperator<Long> findDependValFunc,
                                                                       BiPredicate<Long, Long> decideProceedFunc) {
-    return new TransactionalAction(key, value, Type.WRITE, null, findDependValFunc, decideProceedFunc);
+    return new TransactionalAction(key, -1, value, Type.WRITE, null, findDependValFunc,
+            decideProceedFunc);
   }
   
   /**
@@ -93,7 +98,7 @@ public class TransactionalAction {
    */
   public boolean decideProceed(long dependOn) {
     if (decideProceedFunc == null) return true;
-    return decideProceedFunc.test(dependOn, value);
+    return decideProceedFunc.test(dependOn, knownValue);
   }
 
   /**
@@ -103,7 +108,7 @@ public class TransactionalAction {
    */
   public void findDependentValue(long dependOn) {
     if (findDependValFunc == null) return;
-    this.value = findDependValFunc.apply(dependOn, value);
+    this.value = findDependValFunc.apply(dependOn, knownValue);
   }
 
   /**

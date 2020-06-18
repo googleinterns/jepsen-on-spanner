@@ -8,7 +8,9 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.jepsenonspanner.client.Executor;
 
 import java.util.Collections;
+import java.util.LinkedList;
 import java.util.List;
+import java.util.Queue;
 import java.util.function.Consumer;
 
 /**
@@ -19,11 +21,13 @@ import java.util.function.Consumer;
 public class ReadWriteTransaction extends Operation {
 
   private List<TransactionalAction> spannerActions;
+  private boolean failed;
 
   public ReadWriteTransaction(String loadName, List<String> recordRepresentation,
                               List<TransactionalAction> spannerActions) {
     super(loadName, recordRepresentation);
     this.spannerActions = spannerActions;
+    this.failed = false;
   }
 
   /**
@@ -45,34 +49,66 @@ public class ReadWriteTransaction extends Operation {
         Timestamp commitTimestamp = executor.runTxn(new Executor.TransactionFunction() {
           @Override
           public void run(TransactionContext transaction) {
-            for (TransactionalAction action : spannerActions) {
+            Queue<TransactionalAction> bfs = new LinkedList<>(spannerActions);
+            while (!bfs.isEmpty()) {
+              TransactionalAction action = bfs.poll();
               long dependentValue = -1;
-
-              // Iterate through all dependent operations and execute them first
-              for (; action != null; action = action.getDependentAction()) {
-                if (!action.decideProceed(dependentValue)) {
-                  throw new OperationException(String.format("Unable to proceed to dependent " +
-                          "action %s", String.valueOf(action)));
-                  // abort the whole transaction if anything is determined as unable to proceed
-                  // This will force Spanner to throw a ErrorCode.UNKNOWN exception
-                }
-                action.findDependentValue(dependentValue);
-                if (action.isRead()) {
-                  dependentValue = executor.executeTransactionalRead(action.getKey(), transaction);
-                } else {
-                  executor.executeTransactionalWrite(action.getKey(), action.getValue(), transaction);
-                }
+              if (action.isRead()) {
+                dependentValue = executor.executeTransactionalRead(action.getKey(), transaction);
+                System.out.printf("Read key = %s, value = %s\n", action.getKey(),
+                        dependentValue);
+              } else {
+                System.out.printf("Writing key = %s, value = %s\n", action.getKey(), action.getValue());
+                executor.executeTransactionalWrite(action.getKey(), action.getValue(), transaction);
+//                System.out.print("done\n");
               }
+              TransactionalAction dependent = action.getDependentAction();
+              if (dependent == null) {
+                continue;
+              }
+              if (!dependent.decideProceed(dependentValue)) {
+                return;
+              }
+              dependent.findDependentValue(dependentValue);
+              bfs.offer(dependent);
             }
+
+//            for (TransactionalAction action : spannerActions) {
+//              long dependentValue = -1;
+//
+//              // Iterate through all dependent operations and execute them first
+//              for (; action != null; action = action.getDependentAction()) {
+//                if (!action.decideProceed(dependentValue)) {
+////                  throw new OperationException(String.format("Unable to proceed to dependent " +
+////                          "action %s", String.valueOf(action)));
+////                  // abort the whole transaction if anything is determined as unable to proceed
+////                  // This will force Spanner to throw a ErrorCode.UNKNOWN exception
+//                  return;
+//                }
+//                action.findDependentValue(dependentValue);
+//                if (action.isRead()) {
+//                  dependentValue = executor.executeTransactionalRead(action.getKey(), transaction);
+//                } else {
+//                  System.out.printf("Writing key = %s, value = %s\n", action.getKey(), action.getValue());
+//                  executor.executeTransactionalWrite(action.getKey(), action.getValue(), transaction);
+//                  System.out.print("done\n");
+//                }
+//              }
+//            }
           }
         });
-        executor.recordComplete(getLoadName(), getRecordRepresentation(), commitTimestamp,
-                recordTimestamp);
+        if (failed) {
+          executor.recordFail(getLoadName(), getRecordRepresentation());
+        } else {
+          executor.recordComplete(getLoadName(), getRecordRepresentation(), commitTimestamp,
+                  recordTimestamp);
+        }
       } catch (SpannerException e) {
         if (e.getErrorCode() == ErrorCode.UNKNOWN && e.getCause() instanceof OperationException) {
           // The transaction function has thrown a RuntimeException, meaning that the transaction
           // fails; note that RuntimeException can also be thrown from executeTransactionalRead /
           // Write
+          System.out.println("THIS SHOULD NOT HAPPEN");
           executor.recordFail(getLoadName(), getRecordRepresentation());
         } else {
           executor.recordInfo(getLoadName(), getRecordRepresentation());
