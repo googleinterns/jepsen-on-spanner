@@ -18,6 +18,8 @@ public class JepsenOnSpanner {
           "[projectId] --instance [instanceId] --database [databaseId] --component [INIT / WORKER" +
           " / VERIFIER] --pID [process ID] --initial-values [path to initial values as csv] " +
           "--config-path [path to config json file]";
+  private static final String PARSING_ERROR = "Error parsing history file";
+  private static final String HISTORY_PATH = "history.edn";
 
   public static void main(String[] args) {
     boolean init = false;
@@ -72,6 +74,7 @@ public class JepsenOnSpanner {
           break;
         case "--initial-values":
           initValuePath = args[++i];
+          // initial values need to be csv file
           if (!initValuePath.endsWith(".csv")) {
             System.out.println(ERROR_MSG);
             return;
@@ -79,6 +82,7 @@ public class JepsenOnSpanner {
           break;
         case "--config-path":
           configPath = args[++i];
+          // config has to be a json file
           if (!configPath.endsWith(".json")) {
             System.out.println(ERROR_MSG);
             return;
@@ -96,7 +100,7 @@ public class JepsenOnSpanner {
       return;
     }
 
-    System.out.println("Setting up connection with Spanenr...");
+    System.out.println("Setting up connection with Spanner...");
     Executor executor = new Executor(projectId, instanceId, databaseId, processId, init);
     System.out.println("Done!");
     try {
@@ -104,6 +108,7 @@ public class JepsenOnSpanner {
         executor.createTables();
         executor.initKeyValues(retrieveInitialState(initValuePath));
       } else if (worker) {
+        // This part will be run in a kubernetes instance
         LoadGenerator gen = BankLoadGenerator.createGeneratorFromConfig(configPath);
         while (gen.hasLoad()) {
           Operation op = gen.nextOperation();
@@ -114,7 +119,7 @@ public class JepsenOnSpanner {
       } else if (verifier) {
         executor.extractHistory();
         Verifier v = new BankVerifier();
-        v.verify("history.edn", retrieveInitialState(initValuePath));
+        v.verify(HISTORY_PATH, retrieveInitialState(initValuePath));
       }
     } finally {
       executor.close();
@@ -123,6 +128,10 @@ public class JepsenOnSpanner {
     System.out.println("DONE");
   }
 
+
+  /**
+   * Given a path to the file storing initial state, retrieve the state as a Key Value map
+   */
   private static HashMap<String, Long> retrieveInitialState(String path) {
     HashMap<String, Long> initKVs = new HashMap<>();
     try (Stream<String> stream = Files.lines(Paths.get(path))) {
@@ -133,7 +142,7 @@ public class JepsenOnSpanner {
       return initKVs;
     } catch (IOException e) {
       e.printStackTrace();
-      throw new RuntimeException("ERROR");
+      throw new RuntimeException(PARSING_ERROR);
     }
   }
 }
