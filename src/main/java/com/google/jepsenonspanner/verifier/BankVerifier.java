@@ -15,15 +15,24 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * A BankVerifier is part of the Bank Benchmark and checks that the balances read are consistent
+ * with the results of previous transfers. The sum of all accounts should be consistent.
+ * Specifically, the verifiers checks:
+ * - Whether a read reflects all previous successful transactions
+ * - Whether a successful transaction will result in negative balances
+ * - Whether a failed transaction should have failed due to insufficient balance
+ * - Whether a read reflects a failed transaction (it should not)
+ */
 public class BankVerifier implements Verifier {
   // Workloads specific to the bank benchmark
   private static Keyword READ = Keyword.newKeyword(BankLoadGenerator.READ_LOAD_NAME);
   private static Keyword TRANSFER = Keyword.newKeyword(BankLoadGenerator.TRANSFER_LOAD_NAME);
 
   @Override
-  public boolean verify(String path, Map<String, Long> state) {
+  public boolean verify(String filePath, Map<String, Long> state) {
     try {
-      FileReader fs = new FileReader(new File(path));
+      FileReader fs = new FileReader(new File(filePath));
       return verify(fs, state);
     } catch (FileNotFoundException e) {
       throw new RuntimeException("Invalid file");
@@ -31,11 +40,12 @@ public class BankVerifier implements Verifier {
   }
 
   @VisibleForTesting
-  boolean verify(Readable input, Map<String, Long> state) {
+  boolean verify(Readable input, Map<String, Long> initialState) {
+    HashMap<String, Long> state = new HashMap<>(initialState);
     Parseable pbr = Parsers.newParseable(input);
     Parser parser = Parsers.newParser(Parsers.defaultConfiguration());
 
-    // parses the edn file to Java readable data structure
+    // parses the edn file to Java data structure
     List<Map<Keyword, Object>> records = (List<Map<Keyword, Object>>) parser.nextValue(pbr);
 
     try {
@@ -67,6 +77,9 @@ public class BankVerifier implements Verifier {
       checkOkRead(value, state);
     } else if (opName.equals(TRANSFER)) {
       checkOkTransfer(value, state);
+    } else {
+      // Invalid operation name
+      throw new VerifierException(opName.getName(), value);
     }
   }
 
@@ -81,7 +94,11 @@ public class BankVerifier implements Verifier {
     Map<String, Long> currentState = new HashMap<>();
     for (String representation : value) {
       String[] keyValues = representation.split(" ");
-      currentState.put(keyValues[0], Long.parseLong(keyValues[1]));
+      long balance = Long.parseLong(keyValues[1]);
+      if (balance < 0) {
+        throw new VerifierException(READ.getName(), value);
+      }
+      currentState.put(keyValues[0], balance);
     }
     if (!currentState.equals(state)) {
       throw new VerifierException(READ.getName(), value);
@@ -94,12 +111,17 @@ public class BankVerifier implements Verifier {
    *              account "0" to account "1"
    * @param state a map of current state given all previous records
    */
-  private void checkOkTransfer(List<String> value, Map<String, Long> state) {
+  private void checkOkTransfer(List<String> value, Map<String, Long> state)
+          throws VerifierException {
     String[] transferParams = value.get(0).split(" ");
     String fromAcct = transferParams[0];
     String toAcct = transferParams[1];
     long amount = Long.parseLong(transferParams[2]);
-    state.put(fromAcct, state.get(fromAcct) - amount);
+    long fromAcctBalance = state.get(fromAcct);
+    if (fromAcctBalance < amount) {
+      throw new VerifierException(TRANSFER.getName(), value);
+    }
+    state.put(fromAcct, fromAcctBalance - amount);
     state.put(toAcct, state.get(toAcct) + amount);
   }
 

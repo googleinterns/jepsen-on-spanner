@@ -126,6 +126,11 @@ public class Executor {
             SpannerOptions.newBuilder().setProjectId(projectId).build();
     this.projectId = projectId;
     this.spanner = options.getService();
+    if (!init) {
+      // The database with this id is already created, we can initialize the database client
+      DatabaseId databaseId = DatabaseId.of(options.getProjectId(), instanceId, dbId);
+      this.client = spanner.getDatabaseClient(databaseId);
+    }
     this.adminClient = spanner.getDatabaseAdminClient();
     if (!init) {
       DatabaseId databaseId = DatabaseId.of(options.getProjectId(), instanceId, dbId);
@@ -155,12 +160,11 @@ public class Executor {
                             ") PRIMARY KEY(" + KEY_COLUMN_NAME + ")\n"));
 
     try {
-      System.out.println("Creating...");
       op.get();
+      // initialize the database client
       this.client = spanner.getDatabaseClient(DatabaseId.of(projectId, instanceId, databaseId));
     } catch (ExecutionException e) {
       SpannerException se = (SpannerException) e.getCause();
-      se.printStackTrace();
       // If error code is ALREADY_EXISTS, other executors have created the initial tables already
       if (se.getErrorCode() != ErrorCode.ALREADY_EXISTS) {
         // otherwise throw error
@@ -384,8 +388,6 @@ public class Executor {
               .set(VALUE_COLUMN_NAME).to(kv.getValue()).build());
     }
 
-    int retryCount = 5;
-    int counter = 0;
     try {
       System.out.println("Writing...");
       client.write(mutations);

@@ -64,9 +64,10 @@ public class ReadTransaction extends Operation {
   @Override
   public Consumer<Executor> getExecutionPlan() {
     return executor -> {
-      Timestamp recordTimestamp = executor.recordInvoke(getLoadName(), getRecordRepresentation(),
-              staleness);
+      Timestamp recordTimestamp = null;
       try {
+        recordTimestamp = executor.recordInvoke(getLoadName(), getRecordRepresentation(),
+                staleness);
         Pair<HashMap<String, Long>, Timestamp> result = executor.readKeys(keys, staleness, bounded);
         HashMap<String, Long> keyValues = result.getLeft();
         Timestamp readTimeStamp = result.getRight();
