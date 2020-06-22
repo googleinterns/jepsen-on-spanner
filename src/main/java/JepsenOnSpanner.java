@@ -1,3 +1,7 @@
+import com.beust.jcommander.IParameterValidator;
+import com.beust.jcommander.JCommander;
+import com.beust.jcommander.Parameter;
+import com.beust.jcommander.ParameterException;
 import com.google.jepsenonspanner.client.Executor;
 import com.google.jepsenonspanner.loadgenerator.BankLoadGenerator;
 import com.google.jepsenonspanner.loadgenerator.LoadGenerator;
@@ -5,129 +9,150 @@ import com.google.jepsenonspanner.operation.Operation;
 import com.google.jepsenonspanner.verifier.BankVerifier;
 import com.google.jepsenonspanner.verifier.Verifier;
 
-import java.io.FileNotFoundException;
-import java.io.FileReader;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.HashMap;
+import java.util.Map;
 import java.util.stream.Stream;
 
 public class JepsenOnSpanner {
-  private static final String ERROR_MSG = "Usage: java -jar Jepsen-on-spanner.jar --project " +
-          "[projectId] --instance [instanceId] --database [databaseId] --component [INIT / WORKER" +
-          " / VERIFIER] --pID [process ID] --initial-values [path to initial values as csv] " +
-          "--config-path [path to config json file]";
   private static final String PARSING_ERROR = "Error parsing history file";
   private static final String HISTORY_PATH = "history.edn";
+  private static final String INIT = "INIT";
+  private static final String WORKER = "WORKER";
+  private static final String VERIFIER = "VERIFIER";
+
+  @Parameter(names = {"--project", "-p"}, description = "Project ID", required = true)
+  private String projectId;
+
+  @Parameter(names = {"--instance", "-i"}, description = "Instance ID", required = true)
+  private String instanceId;
+
+  @Parameter(names = {"--database", "-d"}, description = "Database ID", required = true)
+  private String databaseId;
+
+  @Parameter(names = {"--component", "-c"}, description = "Component for the binary to run",
+          required = true, validateWith = ValidateComponent.class)
+  private String component;
+
+  @Parameter(names = {"--pID"}, description = "Process ID", required = true)
+  private int processId;
+
+  @Parameter(names = {"--initial-values", "-iv"}, description = "Path to csv file containing " +
+          "initial state of the database; if not supplied, default to empty", validateWith =
+          IsCsv.class)
+  private String initValuePath;
+
+  @Parameter(names = {"--config-file", "-cf"}, description = "Path to json file containing config" +
+          " for load generator", validateWith = IsJson.class)
+  private String configPath;
+
+  private static void validatePathEndsWith(String suffix, String name, String value) throws ParameterException {
+    if (!value.endsWith(suffix)) {
+      throw new ParameterException("Parameter " + name + " should be a " + suffix +
+              " path (found " + value +")");
+    }
+  }
+
+  private static class IsCsv implements IParameterValidator {
+    @Override
+    public void validate(String name, String value) throws ParameterException {
+      validatePathEndsWith(/*suffix=*/".csv", name, value);
+    }
+  }
+
+  private static class IsJson implements IParameterValidator {
+    @Override
+    public void validate(String name, String value) throws ParameterException {
+      validatePathEndsWith(/*suffix=*/".json", name, value);
+    }
+  }
+
+  /**
+   * Verifies if the argument supplied for component is a valid string.
+   */
+  private static class ValidateComponent implements IParameterValidator {
+    @Override
+    public void validate(String name, String value) throws ParameterException {
+      if (!value.equals(INIT) && !value.equals(WORKER) && !value.equals(VERIFIER)) {
+        throw new ParameterException("Invalid argument " + value);
+      }
+    }
+  }
+
+  /**
+   * Checks if a config path is provided if this is a worker
+   */
+  private boolean invalidArgs() {
+    return component.equals(WORKER) && configPath == null;
+  }
 
   public static void main(String[] args) {
-    boolean init = false;
-    boolean worker = false;
-    boolean verifier = false;
-    String instanceId = null;
-    String databaseId = null;
-    String projectId = null;
-    int processId = -1;
-    String initValuePath = null;
-    String configPath = null;
-
-    if (args.length != 12) {
-      System.out.println(ERROR_MSG);
+    JepsenOnSpanner entry = new JepsenOnSpanner();
+    JCommander parser = JCommander.newBuilder().addObject(entry).build();
+    parser.parse(args);
+    if (entry.invalidArgs()) {
+      System.err.println("Unspecified config path");
       return;
     }
 
-    for (int i = 0; i < args.length; i++) {
-      switch (args[i]) {
-        case "--instance":
-        case "-i":
-          instanceId = args[++i];
-          break;
-        case "--database":
-        case "-d":
-          databaseId = args[++i];
-          break;
-        case "--project":
-        case "-p":
-          projectId = args[++i];
-          break;
-        case "--component":
-        case "-c":
-          String component = args[++i];
-          switch (component) {
-            case "INIT":
-              init = true;
-              break;
-            case "WORKER":
-              worker = true;
-              break;
-            case "VERIFIER":
-              verifier = true;
-              break;
-            default:
-              System.out.println(ERROR_MSG);
-              return;
-          }
-          break;
-        case "--pID":
-          processId = Integer.parseInt(args[++i]);
-          break;
-        case "--initial-values":
-          initValuePath = args[++i];
-          // initial values need to be csv file
-          if (!initValuePath.endsWith(".csv")) {
-            System.out.println(ERROR_MSG);
-            return;
-          }
-          break;
-        case "--config-path":
-          configPath = args[++i];
-          // config has to be a json file
-          if (!configPath.endsWith(".json")) {
-            System.out.println(ERROR_MSG);
-            return;
-          }
-          break;
-        default:
-          System.out.println(ERROR_MSG);
-          return;
-      }
-    }
+    entry.run();
+  }
 
-    if (instanceId == null || databaseId == null || projectId == null ||
-            (!worker && initValuePath == null) || (worker && configPath == null)) {
-      System.out.println(ERROR_MSG);
-      return;
-    }
-
-    System.out.println("Setting up connection with Spanner...");
-    Executor executor = new Executor(projectId, instanceId, databaseId, processId, init);
-    System.out.println("Done!");
+  private void run() {
+    Executor executor = new Executor(projectId, instanceId, databaseId, processId,
+            component.equals(INIT));
     try {
-      if (init) {
-        executor.createTables();
-        executor.initKeyValues(retrieveInitialState(initValuePath));
-      } else if (worker) {
-        // This part will be run in a kubernetes instance
-        LoadGenerator gen = BankLoadGenerator.createGeneratorFromConfig(configPath);
-        while (gen.hasLoad()) {
-          Operation op = gen.nextOperation();
-          System.out.println("Generated op " + op.toString());
-          op.getExecutionPlan().accept(executor);
-          System.out.println("Op " + op.toString() + " done");
-        }
-      } else if (verifier) {
-        executor.extractHistory();
-        Verifier v = new BankVerifier();
-        v.verify(HISTORY_PATH, retrieveInitialState(initValuePath));
+      if (component.equals(INIT)) {
+        initDatabase(executor);
+      } else if (component.equals(WORKER)) {
+        runWorkload(executor);
+      } else if (component.equals(VERIFIER)) {
+        verifyHistory(executor);
       }
+      System.out.printf("Component %s done\n", component);
     } finally {
       executor.close();
     }
-
-    System.out.println("DONE");
   }
 
+  /**
+   * Executes the init component i.e. create testing and history tables, and initialize key value
+   * pairs in the database. If the csv path is not supplied, no value will be inserted.
+   */
+  private void initDatabase(Executor executor) {
+    executor.createTables();
+    if (initValuePath != null) {
+      executor.initKeyValues(retrieveInitialState(initValuePath));
+    }
+  }
+
+  /**
+   * Creates a generator and execute its loads.
+   */
+  private void runWorkload(Executor executor) {
+    LoadGenerator gen = BankLoadGenerator.createGeneratorFromConfig(configPath);
+    while (gen.hasLoad()) {
+      Operation op = gen.nextOperation();
+      System.out.println("Generated op " + op.toString());
+      op.getExecutionPlan().accept(executor);
+      System.out.println("Op " + op.toString() + " done");
+    }
+  }
+
+  /**
+   * Extracts history from the Spanner instance and verifies it.
+   */
+  private void verifyHistory(Executor executor) {
+    executor.extractHistory();
+    Verifier v = new BankVerifier();
+    if (initValuePath != null) {
+      v.verify(HISTORY_PATH, retrieveInitialState(initValuePath));
+    } else {
+      v.verify(HISTORY_PATH, new HashMap<>());
+    }
+  }
 
   /**
    * Given a path to the file storing initial state, retrieve the state as a Key Value map

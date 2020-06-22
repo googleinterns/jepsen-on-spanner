@@ -1,0 +1,16 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: test-worker-$PID
+spec:
+  ttlSecondsAfterFinished: 120
+  template:
+    metadata:
+      name: test-worker-$PID
+    spec:
+      containers:
+        - name: worker
+          image: gcr.io/jepsen-on-spanner-with-gke/jepsen-on-spanner
+          command: ["java"]
+          args: ["-jar","Jepsen-on-spanner.jar","--project","jepsen-on-spanner-with-gke","--instance","jepsen","--database","test","--component","WORKER","--pID","$PID","--config-path","test-config.json"]
+      restartPolicy: Never

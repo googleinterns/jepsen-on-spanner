@@ -1,5 +1,6 @@
 package com.google.jepsenonspanner.verifier;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import us.bpsm.edn.parser.Parseable;
 import us.bpsm.edn.parser.Parsers;
@@ -15,7 +16,7 @@ class BankVerifierTest {
   private HashMap<String, Long> state;
   private BankVerifier verifier;
 
-  @Test
+  @BeforeEach
   void setUp() {
     state = new HashMap(Map.of(
             "0", 20L,

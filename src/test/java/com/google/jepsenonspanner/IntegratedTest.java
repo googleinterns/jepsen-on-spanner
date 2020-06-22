@@ -6,6 +6,8 @@ import com.google.jepsenonspanner.client.Executor;
 import com.google.jepsenonspanner.loadgenerator.BankLoadGenerator;
 import com.google.jepsenonspanner.loadgenerator.LoadGenerator;
 import com.google.jepsenonspanner.operation.Operation;
+import com.google.jepsenonspanner.verifier.BankVerifier;
+import com.google.jepsenonspanner.verifier.Verifier;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
@@ -17,7 +19,8 @@ public class IntegratedTest {
 
   @Test
   void testGenerateLoad() {
-    executor = new Executor("test-instance", "example-db", 0);
+    executor = new Executor("jepsen-on-spanner-with-gke", "jepsen", "example-db", 0, /*init=*/true);
+    executor.createTables();
     HashMap<String, Long> initialValues = new HashMap<>();
     for (int i = 0; i < 5; i++) {
       initialValues.put(String.valueOf(i), 20L);
@@ -30,12 +33,13 @@ public class IntegratedTest {
       op.getExecutionPlan().accept(executor);
     }
     executor.extractHistory();
+    Verifier v = new BankVerifier();
+    v.verify("history.edn", initialValues);
   }
 
   @AfterEach
   void cleanUp() {
-//    executor.getClient().write(Arrays.asList(Mutation.delete(Executor.TESTING_TABLE_NAME, KeySet.all()),
-//            Mutation.delete(Executor.HISTORY_TABLE_NAME, KeySet.all())));
     executor.cleanUp();
+    executor.close();
   }
 }

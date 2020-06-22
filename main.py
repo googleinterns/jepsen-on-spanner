@@ -6,11 +6,9 @@ import argparse
 
 parser = argparse.ArgumentParser(
     'Driver for Jepsen-on-Spanner testing framework.')
-parser.add_argument('--clean', type=bool, nargs='?', const=False)
 parser.add_argument('--redeploy', type=bool, nargs='?', const=False)
 parser.add_argument('--workers', type=int)
 args = parser.parse_args()
-clean_up = args.clean
 worker_num = args.workers
 redeploy = args.redeploy
 
@@ -22,7 +20,9 @@ if redeploy:
         "gcloud builds submit --tag gcr.io/jepsen-on-spanner-with-gke/jepsen-on-spanner ."
     )
 
-# Run the set up
+# Run the set up:
+# 1. create the tables
+# 2. insert the initial key value pairs
 os.system(
     "java -jar ./build/libs/Jepsen-on-spanner-1.0-SNAPSHOT-all.jar --project "
     "jepsen-on-spanner-with-gke --instance jepsen --database test --component INIT --pID 0 "
@@ -52,14 +52,17 @@ while in_progress:
             time.sleep(3)
             break
 
-os.system(
-    "java -jar ./build/libs/Jepsen-on-spanner-1.0-SNAPSHOT-all.jar --project "
-    "jepsen-on-spanner-with-gke --instance jepsen --database test --component VERIFIER "
-    "--pID 0 --initial-values init.csv")
+output = subprocess.run(
+    ["java", "-jar", "./build/libs/Jepsen-on-spanner-1.0-SNAPSHOT-all.jar", "--project",
+    "jepsen-on-spanner-with-gke", "--instance", "jepsen", "--database", "test", "--component",
+    "VERIFIER", "--pID", "0", "--initial-values", "init.csv"],
+    stdout=subprocess.PIPE).stdout.decode("utf-8")
+print(output)
+
+if "Valid!" in output:
+    for i in range(1, worker_num + 1):
+        os.system(f"kubectl delete job test-worker-{i}")
 
 os.system("rm -r ./jobs")
 
-if clean_up:
-    for i in range(1, worker_num + 1):
-        os.system(f"kubectl delete job test-worker-{i}")
 os.system("gcloud spanner databases delete test --instance=jepsen")

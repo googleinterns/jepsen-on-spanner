@@ -222,13 +222,8 @@ public class Executor {
       @Nullable
       @Override
       public Void run(TransactionContext transaction) throws Exception {
-//        try {
         transactionToRun.run(transaction);
         return null;
-//        } catch (Exception e) {
-//          e.printStackTrace();
-//          throw e;
-//        }
       }
     });
     return transactionRunner.getCommitTimestamp();

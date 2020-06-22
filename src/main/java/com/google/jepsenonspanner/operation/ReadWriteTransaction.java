@@ -34,7 +34,7 @@ public class ReadWriteTransaction extends Operation {
    * The execution function of a ReadWriteTransaction will:
    * - Write an "invoke" entry into the history table
    * - Traverse through each TransactionalAction, and traverse through any dependent action in a
-   * DFS style if there is any; abort any time there is a failed condition by throwing a
+   * BFS style if there is any; abort any time there is a failed condition by throwing a
    * RuntimeException
    * - Write an "ok" entry into the history table and update the timestamp of the "invoke" entry
    * - If there is a SpannerException caused by a RuntimeError thrown from the transaction
@@ -55,46 +55,24 @@ public class ReadWriteTransaction extends Operation {
               long dependentValue = -1;
               if (action.isRead()) {
                 dependentValue = executor.executeTransactionalRead(action.getKey(), transaction);
-                System.out.printf("Read key = %s, value = %s\n", action.getKey(),
-                        dependentValue);
+                System.out.printf("Read key = %s, value = %s in %s\n", action.getKey(),
+                        dependentValue, super.toString());
               } else {
-                System.out.printf("Writing key = %s, value = %s\n", action.getKey(), action.getValue());
+                System.out.printf("Writing key = %s, value = %s in %s\n", action.getKey(),
+                        action.getValue(), super.toString());
                 executor.executeTransactionalWrite(action.getKey(), action.getValue(), transaction);
-//                System.out.print("done\n");
               }
               TransactionalAction dependent = action.getDependentAction();
               if (dependent == null) {
                 continue;
               }
               if (!dependent.decideProceed(dependentValue)) {
+                failed = true;
                 return;
               }
               dependent.findDependentValue(dependentValue);
               bfs.offer(dependent);
             }
-
-//            for (TransactionalAction action : spannerActions) {
-//              long dependentValue = -1;
-//
-//              // Iterate through all dependent operations and execute them first
-//              for (; action != null; action = action.getDependentAction()) {
-//                if (!action.decideProceed(dependentValue)) {
-////                  throw new OperationException(String.format("Unable to proceed to dependent " +
-////                          "action %s", String.valueOf(action)));
-////                  // abort the whole transaction if anything is determined as unable to proceed
-////                  // This will force Spanner to throw a ErrorCode.UNKNOWN exception
-//                  return;
-//                }
-//                action.findDependentValue(dependentValue);
-//                if (action.isRead()) {
-//                  dependentValue = executor.executeTransactionalRead(action.getKey(), transaction);
-//                } else {
-//                  System.out.printf("Writing key = %s, value = %s\n", action.getKey(), action.getValue());
-//                  executor.executeTransactionalWrite(action.getKey(), action.getValue(), transaction);
-//                  System.out.print("done\n");
-//                }
-//              }
-//            }
           }
         });
         if (failed) {
@@ -108,7 +86,6 @@ public class ReadWriteTransaction extends Operation {
           // The transaction function has thrown a RuntimeException, meaning that the transaction
           // fails; note that RuntimeException can also be thrown from executeTransactionalRead /
           // Write
-          System.out.println("THIS SHOULD NOT HAPPEN");
           executor.recordFail(getLoadName(), getRecordRepresentation());
         } else {
           executor.recordInfo(getLoadName(), getRecordRepresentation());
