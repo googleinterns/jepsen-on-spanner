@@ -7,7 +7,7 @@ import argparse
 parser = argparse.ArgumentParser(
     'Driver for Jepsen-on-Spanner testing framework.')
 parser.add_argument('--redeploy', type=bool, nargs='?', const=False)
-parser.add_argument('--workers', type=int)
+parser.add_argument('--workers', type=int, required=True)
 args = parser.parse_args()
 worker_num = args.workers
 redeploy = args.redeploy

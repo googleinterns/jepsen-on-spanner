@@ -55,14 +55,14 @@ public class JepsenOnSpanner {
     }
   }
 
-  private static class IsCsv implements IParameterValidator {
+  public static class IsCsv implements IParameterValidator {
     @Override
     public void validate(String name, String value) throws ParameterException {
       validatePathEndsWith(/*suffix=*/".csv", name, value);
     }
   }
 
-  private static class IsJson implements IParameterValidator {
+  public static class IsJson implements IParameterValidator {
     @Override
     public void validate(String name, String value) throws ParameterException {
       validatePathEndsWith(/*suffix=*/".json", name, value);
@@ -72,7 +72,7 @@ public class JepsenOnSpanner {
   /**
    * Verifies if the argument supplied for component is a valid string.
    */
-  private static class ValidateComponent implements IParameterValidator {
+  public static class ValidateComponent implements IParameterValidator {
     @Override
     public void validate(String name, String value) throws ParameterException {
       if (!value.equals(INIT) && !value.equals(WORKER) && !value.equals(VERIFIER)) {
