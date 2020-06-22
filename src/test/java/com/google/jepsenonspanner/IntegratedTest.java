@@ -29,7 +29,7 @@ public class IntegratedTest {
     LoadGenerator gen = new BankLoadGenerator(50, 100, 5, 1);
     while (gen.hasLoad()) {
       Operation op = gen.nextOperation();
-      System.out.println(op.toString());
+      System.out.printf("Generated op %s", op.toString());
       op.getExecutionPlan().accept(executor);
     }
     executor.extractHistory();

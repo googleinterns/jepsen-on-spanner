@@ -21,8 +21,8 @@ if redeploy:
     )
 
 # Run the set up:
-# 1. create the tables
-# 2. insert the initial key value pairs
+# 1. create the testing and history tables
+# 2. insert the initial key value pairs in init.csv
 os.system(
     "java -jar ./build/libs/Jepsen-on-spanner-1.0-SNAPSHOT-all.jar --project "
     "jepsen-on-spanner-with-gke --instance jepsen --database test --component INIT --pID 0 "

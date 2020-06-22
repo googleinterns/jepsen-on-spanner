@@ -106,7 +106,7 @@ public class BankLoadGenerator extends LoadGenerator {
     this.rand = new Random(seed);
     this.config = config;
     this.startTime = System.currentTimeMillis();
-    System.out.println(seed);
+    System.out.printf("Created bank generator with seed %d\n", seed);
   }
 
   /**
