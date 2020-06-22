@@ -218,13 +218,13 @@ public class BankLoadGenerator extends LoadGenerator {
     int transferAmount = rand.nextInt(this.maxBalance / this.acctNumber) + 1;
     TransactionalAction acct1Write =
             TransactionalAction.createDependentTransactionalWrite(acct1, transferAmount,
-                    (balance, transfer) -> balance - transfer,
-                    (balance, transfer) -> balance >= transfer);
+                    balance -> balance - transferAmount,
+                    balance -> balance >= transferAmount);
     transaction.get(0).setDependentAction(acct1Write);
     TransactionalAction acct2Write =
             TransactionalAction.createDependentTransactionalWrite(acct2, transferAmount,
-                    (balance, transfer) -> balance + transfer,
-                    (balance, transfer) -> true);
+                    balance -> balance + transferAmount,
+                    balance -> true);
     transaction.get(1).setDependentAction(acct2Write);
 
     return new ReadWriteTransaction(TRANSFER_LOAD_NAME, Collections.singletonList(String.format(

@@ -2,14 +2,13 @@ package com.google.jepsenonspanner.operation;
 
 import java.util.function.BiPredicate;
 import java.util.function.BinaryOperator;
+import java.util.function.LongPredicate;
+import java.util.function.LongUnaryOperator;
 
 public class TransactionalAction {
 
   private String key;
   private long value;
-
-  // the value that will be used to calculate dependent value e.g. transfer amount in a transfer
-  private long knownValue;
   
   // true means read, false means write
   public enum Type {
@@ -24,24 +23,22 @@ public class TransactionalAction {
 
   // not null if this is a dependent operation; a function that returns the value that depends on
   // a previous operation (usually a read)
-  private BinaryOperator<Long> findDependValFunc;
+  private LongUnaryOperator findDependValFunc;
 
   // not null if this is a dependent operation; a function that decides whether current operation
   // should proceed, depending on the return value of the previous operation (usually a read)
-  private BiPredicate<Long, Long> decideProceedFunc;
+  private LongPredicate decideProceedFunc;
 
   /**
    * Constructor for a dependent transactional operation 
-   * @param key 
-   * @param value
+   * @param key
    * @param actionType
    * @param findDependValFunc
    * @param decideProceedFunc   
    */
-  public TransactionalAction(String key, int value, int knownValue, Type actionType,
-                             BinaryOperator<Long> findDependValFunc,
-                             BiPredicate<Long, Long> decideProceedFunc) {
-    this(key, -1, value, actionType, null, findDependValFunc, decideProceedFunc);
+  public TransactionalAction(String key, Type actionType, LongUnaryOperator findDependValFunc,
+                             LongPredicate decideProceedFunc) {
+    this(key, /*value=*/-1, actionType, /*dependent=*/null, findDependValFunc, decideProceedFunc);
   }
 
   /**
@@ -51,7 +48,8 @@ public class TransactionalAction {
    * @param actionType
    */
   public TransactionalAction(String key, int value, Type actionType) {
-    this(key, value, -1, actionType, null, null, null);
+    this(key, value, actionType, /*dependent=*/null, /*findDependValueFunc=*/null,
+            /*decideProceedFunc=*/null);
   }
 
   /**
@@ -63,13 +61,10 @@ public class TransactionalAction {
    * @param findDependValFunc
    * @param decideProceedFunc
    */
-  public TransactionalAction(String key, int value, int knownValue, Type actionType,
-                             TransactionalAction dependent,
-                             BinaryOperator<Long> findDependValFunc,
-                             BiPredicate<Long, Long> decideProceedFunc) {
+  public TransactionalAction(String key, int value, Type actionType, TransactionalAction dependent,
+                             LongUnaryOperator findDependValFunc, LongPredicate decideProceedFunc) {
     this.key = key;
     this.value = value;
-    this.knownValue = knownValue;
     this.actionType = actionType;
     this.dependent = dependent;
     this.findDependValFunc = findDependValFunc;
@@ -77,17 +72,17 @@ public class TransactionalAction {
   }
   
   public static TransactionalAction createTransactionalRead(String key) {
-    return new TransactionalAction(key, -1, -1, Type.READ, null, null, null);
+    return new TransactionalAction(key, /*value=*/-1, Type.READ);
   }
 
   public static TransactionalAction createTransactionalWrite(String key, int value) {
-    return new TransactionalAction(key, value, -1, Type.WRITE, null, null, null);
+    return new TransactionalAction(key, value, Type.WRITE);
   }
 
   public static TransactionalAction createDependentTransactionalWrite(String key, int value,
-                                                                      BinaryOperator<Long> findDependValFunc,
-                                                                      BiPredicate<Long, Long> decideProceedFunc) {
-    return new TransactionalAction(key, -1, value, Type.WRITE, null, findDependValFunc,
+                                                                      LongUnaryOperator findDependValFunc,
+                                                                      LongPredicate decideProceedFunc) {
+    return new TransactionalAction(key, /*value=*/-1, Type.WRITE, null, findDependValFunc,
             decideProceedFunc);
   }
   
@@ -98,7 +93,7 @@ public class TransactionalAction {
    */
   public boolean decideProceed(long dependOn) {
     if (decideProceedFunc == null) return true;
-    return decideProceedFunc.test(dependOn, knownValue);
+    return decideProceedFunc.test(dependOn);
   }
 
   /**
@@ -108,7 +103,7 @@ public class TransactionalAction {
    */
   public void findDependentValue(long dependOn) {
     if (findDependValFunc == null) return;
-    this.value = findDependValFunc.apply(dependOn, knownValue);
+    this.value = findDependValFunc.applyAsLong(dependOn);
   }
 
   /**
