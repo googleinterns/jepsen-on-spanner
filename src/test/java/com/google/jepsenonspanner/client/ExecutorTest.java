@@ -11,6 +11,7 @@ import com.google.cloud.spanner.TransactionContext;
 import com.google.jepsenonspanner.operation.OperationException;
 import org.apache.commons.lang3.tuple.Pair;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -27,12 +28,18 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ExecutorTest {
 
+  private static final String PROJECT_ID = "jepsen-on-spanner-with-gke";
   private static final String INSTANCE_ID = "test-instance";
   private static final String DATABASE_ID = "example-db";
   private static int PID = 0;
-  static Executor executor = new Executor(INSTANCE_ID, DATABASE_ID, PID);
+  static Executor executor = new Executor(PROJECT_ID, INSTANCE_ID, DATABASE_ID, PID, /*init=*/true);
   private static String LOAD_NAME = "transfer";
   private List<String> representation;
+
+  @BeforeAll
+  static void setUp() {
+    executor.createTables();
+  }
 
   @BeforeEach
   void setUpRepresentation() {
@@ -44,8 +51,7 @@ class ExecutorTest {
 
   @AfterEach
   void cleanup() {
-    executor.getClient().write(Arrays.asList(Mutation.delete(Executor.TESTING_TABLE_NAME, KeySet.all()),
-            Mutation.delete(Executor.HISTORY_TABLE_NAME, KeySet.all())));
+    executor.cleanUp();
   }
 
   @Test

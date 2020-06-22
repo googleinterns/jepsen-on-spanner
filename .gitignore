@@ -5,7 +5,4 @@ build
 lib
 *.edn
 .gcloudignore
-*.yaml
-*.csv
-Dockerfile
 *.json

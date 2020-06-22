@@ -19,7 +19,7 @@ public class VerifierException extends Exception {
     return representation;
   }
 
-  public VerifierException(String opName, List<String> representation) {
+  VerifierException(String opName, List<String> representation) {
     super(opName + " " + String.valueOf(representation));
     this.opName = opName;
     this.representation = representation;

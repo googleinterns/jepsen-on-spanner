@@ -132,6 +132,10 @@ public class Executor {
       this.client = spanner.getDatabaseClient(databaseId);
     }
     this.adminClient = spanner.getDatabaseAdminClient();
+    if (!init) {
+      DatabaseId databaseId = DatabaseId.of(options.getProjectId(), instanceId, dbId);
+      this.client = spanner.getDatabaseClient(databaseId);
+    }
     this.processID = processID;
     this.instanceId = instanceId;
     this.databaseId = dbId;
@@ -355,9 +359,8 @@ public class Executor {
       }
       return commitTimestamp;
     } catch (SpannerException e) {
-      System.out.println(staleness);
-      System.out.println(e.getCause());
-      e.printStackTrace();
+      System.out.printf("Error in writing record %s %s %s: %s\n", recordType.toString(), opName,
+              representation, e.getMessage());
       throw new RuntimeException(RECORDER_ERROR);
     }
   }
@@ -380,13 +383,11 @@ public class Executor {
     }
 
     try {
-      System.out.println("Writing...");
+      System.out.printf("Writing key-value pairs %s\n", initialKVs);
       client.write(mutations);
-      System.out.println("Done writing.");
+      System.out.printf("Done writing %s\n", initialKVs);
     } catch (SpannerException e) {
-      System.out.println(e.getMessage());
-      e.printStackTrace();
-      System.out.println(e.toString());
+      System.out.printf("Error in writing key-value pairs %s: %s\n", initialKVs, e.getMessage());
       throw new RuntimeException(RECORDER_ERROR);
     }
   }
@@ -402,7 +403,7 @@ public class Executor {
     List<String> representation = row.getStringList(VALUE_COLUMN_NAME);
     String repr = Printers.printString(Printers.defaultPrinterProtocol(), representation);
     record.put(Keyword.newKeyword("value"), representation);
-    record.put(Keyword.newKeyword("process"), processID);
+    record.put(Keyword.newKeyword("process"), row.getLong(PID_COLUMN_NAME));
     return record;
   }
 

@@ -1,13 +1,18 @@
 package com.google.jepsenonspanner.loadgenerator;
 
+import com.google.gson.Gson;
 import com.google.jepsenonspanner.operation.Operation;
 import com.google.jepsenonspanner.operation.ReadTransaction;
 import com.google.jepsenonspanner.operation.ReadWriteTransaction;
 import com.google.jepsenonspanner.operation.TransactionalAction;
 
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileReader;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Random;
 
@@ -76,6 +81,11 @@ public class BankLoadGenerator extends LoadGenerator {
   private static final long MAX_MILLISECOND_PAST = 5 * 60 * 1000; // 5 minutes
   public static final String READ_LOAD_NAME = "read";
   public static final String TRANSFER_LOAD_NAME = "transfer";
+  private static final String OP_LIMIT = "opLimit";
+  private static final String MAX_BALANCE = "maxBalance";
+  private static final String ACCT_NUMBER = "acctNumber";
+  private static final String RATIO_CONFIG = "opRatio";
+  private static final String ERR_MSG = "Error parsing config file ";
 
   /**
    * Constructor for the bank load generator specifying seed
@@ -96,6 +106,7 @@ public class BankLoadGenerator extends LoadGenerator {
     this.rand = new Random(seed);
     this.config = config;
     this.startTime = System.currentTimeMillis();
+    System.out.printf("Created bank generator with seed %d\n", seed);
   }
 
   /**
@@ -125,6 +136,27 @@ public class BankLoadGenerator extends LoadGenerator {
   public BankLoadGenerator(int opLimit, int maxBalance, int acctNumber, int randSeed) {
     this(opLimit, maxBalance, acctNumber, /*config=*/new Config(/*strongRead=*/2, /*boundedStaleRead
     =*/1, /*exactStaleRead=*/1, /*transfer=*/2), randSeed);
+  }
+
+  public static BankLoadGenerator createGeneratorFromConfig(String configPath) {
+    Gson gson = new Gson();
+    try {
+      HashMap<String, String> config = gson.fromJson(new FileReader(new File(configPath)),
+              HashMap.class);
+      int opLimit = Integer.parseInt(config.get(OP_LIMIT));
+      int maxBalance = Integer.parseInt(config.get(MAX_BALANCE));
+      int acctNumber = Integer.parseInt(config.get(ACCT_NUMBER));
+      String[] configRatios = config.get(RATIO_CONFIG).split(" ");
+      if (configRatios.length != 4) {
+        throw new RuntimeException(ERR_MSG + configPath);
+      }
+      return new BankLoadGenerator(opLimit, maxBalance, acctNumber,
+              new Config(Integer.parseInt(configRatios[0]), Integer.parseInt(configRatios[1]),
+                      Integer.parseInt(configRatios[2]), Integer.parseInt(configRatios[3])));
+    } catch (FileNotFoundException | ClassCastException e) {
+      e.printStackTrace();
+      throw new RuntimeException(ERR_MSG + configPath);
+    }
   }
 
   @Override
@@ -163,13 +195,13 @@ public class BankLoadGenerator extends LoadGenerator {
   private ReadTransaction boundedStaleRead() {
     return ReadTransaction.createBoundedStaleRead(READ_LOAD_NAME, getReadKeys(),
             rand.nextInt((int) Math.min(MAX_MILLISECOND_PAST,
-                    Math.max(System.currentTimeMillis() - startTime, 0))) + 1);
+                    Math.max(System.currentTimeMillis() - startTime, 1))) + 1);
   }
 
   private ReadTransaction exactStaleRead() {
     return ReadTransaction.createExactStaleRead(READ_LOAD_NAME, getReadKeys(),
             rand.nextInt((int) Math.min(MAX_MILLISECOND_PAST,
-                    Math.max(System.currentTimeMillis() - startTime, 0))) + 1);
+                    Math.max(System.currentTimeMillis() - startTime, 1))) + 1);
   }
 
   private ReadWriteTransaction transfer() {
@@ -186,13 +218,13 @@ public class BankLoadGenerator extends LoadGenerator {
     int transferAmount = rand.nextInt(this.maxBalance / this.acctNumber) + 1;
     TransactionalAction acct1Write =
             TransactionalAction.createDependentTransactionalWrite(acct1, transferAmount,
-                    (balance, transfer) -> balance - transfer,
-                    (balance, transfer) -> balance >= transfer);
+                    balance -> balance - transferAmount,
+                    balance -> balance >= transferAmount);
     transaction.get(0).setDependentAction(acct1Write);
     TransactionalAction acct2Write =
             TransactionalAction.createDependentTransactionalWrite(acct2, transferAmount,
-                    (balance, transfer) -> balance + transfer,
-                    (balance, transfer) -> true);
+                    balance -> balance + transferAmount,
+                    balance -> true);
     transaction.get(1).setDependentAction(acct2Write);
 
     return new ReadWriteTransaction(TRANSFER_LOAD_NAME, Collections.singletonList(String.format(
