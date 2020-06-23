@@ -43,6 +43,7 @@ public class ReadWriteTransaction extends Operation {
    */
   @Override
   public Consumer<Executor> getExecutionPlan() {
+    String currentOp = toString();
     return executor -> {
       try {
         Timestamp recordTimestamp = executor.recordInvoke(getLoadName(), getRecordRepresentation());
@@ -56,10 +57,10 @@ public class ReadWriteTransaction extends Operation {
               if (action.isRead()) {
                 dependentValue = executor.executeTransactionalRead(action.getKey(), transaction);
                 System.out.printf("Read key = %s, value = %s in %s\n", action.getKey(),
-                        dependentValue, super.toString());
+                        dependentValue, currentOp);
               } else {
                 System.out.printf("Writing key = %s, value = %s in %s\n", action.getKey(),
-                        action.getValue(), super.toString());
+                        action.getValue(), currentOp);
                 executor.executeTransactionalWrite(action.getKey(), action.getValue(), transaction);
               }
               TransactionalAction dependent = action.getDependentAction();
