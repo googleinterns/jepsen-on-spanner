@@ -65,7 +65,7 @@ public class Executor {
   public static final String VALUE_COLUMN_NAME = "Value";
   public static final String RECORD_TYPE_COLUMN_NAME = "OpType";
   public static final String TIME_COLUMN_NAME = "Time";
-  public static final String REAL_TIME_COLUMN_NAME = "Real Time";
+  public static final String REAL_TIME_COLUMN_NAME = "RealTime";
   public static final String PID_COLUMN_NAME = "ProcessID";
   public static final String OP_NAME_COLUMN_NAME = "Load";
   public static final String INVOKE_STR = "invoke";
@@ -294,7 +294,10 @@ public class Executor {
           Struct row = transaction.readRow(HISTORY_TABLE_NAME, Key.of(invokeTimestamp, opName,
                   processID, RecordType.INVOKE.getCode()),
                   Collections.singletonList(REAL_TIME_COLUMN_NAME));
-          Timestamp realTimestamp = row.getTimestamp(REAL_TIME_COLUMN_NAME);
+          Timestamp realTimestamp = null;
+          if (!row.isNull(REAL_TIME_COLUMN_NAME)) {
+            realTimestamp = row.getTimestamp(REAL_TIME_COLUMN_NAME);
+          }
           transaction.buffer(Arrays.asList(
                   Mutation.newInsertBuilder(HISTORY_TABLE_NAME)
                           .set(TIME_COLUMN_NAME).to(commitTimestamp)

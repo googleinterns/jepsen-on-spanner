@@ -43,6 +43,8 @@ public class BankVerifier implements Verifier {
   @VisibleForTesting
   boolean verify(Readable input, Map<String, Long> initialState) {
     HashMap<String, Long> state = new HashMap<>(initialState);
+    HashMap<String, Long> concurrentTxnState = null;
+    boolean concurrentTxnFlag = false;
     Parseable pbr = Parsers.newParseable(input);
     Parser parser = Parsers.newParser(Parsers.defaultConfiguration());
 
@@ -53,8 +55,18 @@ public class BankVerifier implements Verifier {
       for (Map<Keyword, Object> record : records) {
         if (record.get(TYPE) == OK) {
           checkOk(record, state);
+          concurrentTxnFlag = false;
         } else if (record.get(TYPE) == FAIL) {
-          checkFail(record, state);
+          checkFail(record, state, concurrentTxnState);
+          if (!concurrentTxnFlag) {
+            concurrentTxnState = null;
+          }
+        } else if (record.get(TYPE) == INVOKE) {
+          if (concurrentTxnFlag) {
+            concurrentTxnState = new HashMap<>(state);
+          } else {
+            concurrentTxnFlag = true;
+          }
         }
       }
     } catch (VerifierException e) {
@@ -70,8 +82,7 @@ public class BankVerifier implements Verifier {
    * Given an "ok" record and the current state of the database according to previous records,
    * determine if this record is valid. Throws a VerifierException if it is invalid.
    */
-  private void checkOk(Map<Keyword, Object> record, Map<String, Long> state)
-          throws VerifierException {
+  private void checkOk(Map<Keyword, Object> record, Map<String, Long> state) throws VerifierException {
     Keyword opName = (Keyword) record.get(OP_NAME);
     List<String> value = (List<String>) record.get(VALUE);
     if (opName.equals(READ)) {
@@ -130,11 +141,12 @@ public class BankVerifier implements Verifier {
    * Given a "fail" record and the current state of the database according to previous records,
    * determine if this record is valid. Throws a VerifierException if it is invalid.
    */
-  private void checkFail(Map<Keyword, Object> record, Map<String, Long> state) throws VerifierException {
+  private void checkFail(Map<Keyword, Object> record, Map<String, Long> state,
+                         Map<String, Long> concurrentTxnState) throws VerifierException {
     Keyword opName = (Keyword) record.get(OP_NAME);
     List<String> value = (List<String>) record.get(VALUE);
     if (opName.equals(TRANSFER)) {
-      checkFailTransfer(value, state);
+      checkFailTransfer(value, state, concurrentTxnState);
     } else {
       // a read operation should not produce a fail record
       throw new VerifierException(opName.getName(), value);
@@ -148,12 +160,12 @@ public class BankVerifier implements Verifier {
    *              account "0" to account "1"
    * @param state a map of current state given all previous records
    */
-  private void checkFailTransfer(List<String> value, Map<String, Long> state)
-          throws VerifierException {
+  private void checkFailTransfer(List<String> value, Map<String, Long> state,
+                                 Map<String, Long> concurrentTxnState) throws VerifierException {
     String[] transferParams = value.get(0).split(" ");
     String fromAcct = transferParams[0];
     long amount = Long.parseLong(transferParams[2]);
-    if (state.get(fromAcct) >= amount) {
+    if (state.get(fromAcct) >= amount && concurrentTxnState.get(fromAcct) >= amount) {
       // amount should be transferable
       throw new VerifierException(TRANSFER.getName(), value);
     }
