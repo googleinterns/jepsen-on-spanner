@@ -11,6 +11,7 @@ import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.sql.Timestamp;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -25,11 +26,7 @@ public class BankLoadGenerator extends LoadGenerator {
   /**
    * Configuration class to adjust distribution of randomly generated loads
    */
-  public static class Config {
-    private int strongRead;
-    private int boundedStaleRead;
-    private int exactStaleRead;
-    private int transfer;
+  public static class Config extends LoadRatioConfig {
 
     public enum LoadType {
       STRONG_READ,
@@ -38,13 +35,11 @@ public class BankLoadGenerator extends LoadGenerator {
       TRANSFER
     }
 
-    public Config(int strongRead, int boundedStaleRead, int exactStaleRead, int transfer) {
-      if (strongRead + boundedStaleRead + exactStaleRead + transfer == 0)
-        throw new RuntimeException("Invalid config");
-      this.strongRead = strongRead;
-      this.boundedStaleRead = boundedStaleRead;
-      this.exactStaleRead = exactStaleRead;
-      this.transfer = transfer;
+    public Config(int ... loadRatios) {
+      super(loadRatios);
+      if (loadRatios.length != 4) {
+        throw new RuntimeException("Invalid Ratio Length");
+      }
     }
 
     /**
@@ -52,22 +47,17 @@ public class BankLoadGenerator extends LoadGenerator {
      * 0 - strong read, 1 - bounded stale read, 2 - exact stale read, 3 - transfer
      * @param randNum random number given by generator
      */
-    public LoadType categorize(int randNum) {
-      int distributionSum = strongRead + boundedStaleRead + exactStaleRead + transfer;
-      randNum %= distributionSum;
-      distributionSum -= transfer;
-      if (randNum >= distributionSum) {
-        return LoadType.TRANSFER;
+    public LoadType categorizeBankLoad(int randNum) {
+      switch (super.categorize(randNum)) {
+        case 0:
+          return LoadType.STRONG_READ;
+        case 1:
+          return LoadType.BOUNDED_STALE_READ;
+        case 2:
+          return LoadType.EXACT_STALE_READ;
+        default:
+          return LoadType.TRANSFER;
       }
-      distributionSum -= exactStaleRead;
-      if (randNum >= distributionSum) {
-        return LoadType.EXACT_STALE_READ;
-      }
-      distributionSum -= boundedStaleRead;
-      if (randNum >= distributionSum) {
-        return LoadType.BOUNDED_STALE_READ;
-      }
-      return LoadType.STRONG_READ;
     }
   }
 
@@ -146,13 +136,12 @@ public class BankLoadGenerator extends LoadGenerator {
       int opLimit = Integer.parseInt(config.get(OP_LIMIT));
       int maxBalance = Integer.parseInt(config.get(MAX_BALANCE));
       int acctNumber = Integer.parseInt(config.get(ACCT_NUMBER));
-      String[] configRatios = config.get(RATIO_CONFIG).split(" ");
+      String[] configRatioString = config.get(RATIO_CONFIG).split(" ");
+      int[] configRatios = Arrays.stream(configRatioString).mapToInt(Integer::parseInt).toArray();
       if (configRatios.length != 4) {
         throw new RuntimeException(ERR_MSG + configPath);
       }
-      return new BankLoadGenerator(opLimit, maxBalance, acctNumber,
-              new Config(Integer.parseInt(configRatios[0]), Integer.parseInt(configRatios[1]),
-                      Integer.parseInt(configRatios[2]), Integer.parseInt(configRatios[3])));
+      return new BankLoadGenerator(opLimit, maxBalance, acctNumber, new Config(configRatios));
     } catch (FileNotFoundException | ClassCastException e) {
       e.printStackTrace();
       throw new RuntimeException(ERR_MSG + configPath);
@@ -168,7 +157,7 @@ public class BankLoadGenerator extends LoadGenerator {
 
     opLimit--;
     int nextOp = rand.nextInt();
-    switch (config.categorize(nextOp)) {
+    switch (config.categorizeBankLoad(nextOp)) {
       case STRONG_READ:
         return strongRead();
       case BOUNDED_STALE_READ:
