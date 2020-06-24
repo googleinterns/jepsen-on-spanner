@@ -79,8 +79,8 @@ public class BankLoadGenerator extends LoadGenerator {
   private long startTime;
 
   private static final long MAX_MILLISECOND_PAST = 5 * 60 * 1000; // 5 minutes
-  public static final String READ_LOAD_NAME = "read";
-  public static final String TRANSFER_LOAD_NAME = "transfer";
+  public static final String READ_LOAD_NAME = "1read";
+  public static final String TRANSFER_LOAD_NAME = "0transfer";
   private static final String OP_LIMIT = "opLimit";
   private static final String MAX_BALANCE = "maxBalance";
   private static final String ACCT_NUMBER = "acctNumber";

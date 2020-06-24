@@ -26,8 +26,9 @@ import java.util.Map;
  */
 public class BankVerifier implements Verifier {
   // Workloads specific to the bank benchmark
-  private static Keyword READ = Keyword.newKeyword(BankLoadGenerator.READ_LOAD_NAME);
-  private static Keyword TRANSFER = Keyword.newKeyword(BankLoadGenerator.TRANSFER_LOAD_NAME);
+  private static Keyword READ = Keyword.newKeyword(BankLoadGenerator.READ_LOAD_NAME.substring(1));
+  private static Keyword TRANSFER =
+          Keyword.newKeyword(BankLoadGenerator.TRANSFER_LOAD_NAME.substring(1));
 
   @Override
   public boolean verify(String filePath, Map<String, Long> state) {

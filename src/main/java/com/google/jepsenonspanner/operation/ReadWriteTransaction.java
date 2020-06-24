@@ -71,6 +71,7 @@ public class ReadWriteTransaction extends Operation {
                 failed = true;
                 return;
               }
+              failed = false;
               dependent.findDependentValue(dependentValue);
               bfs.offer(dependent);
             }
