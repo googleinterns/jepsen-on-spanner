@@ -11,11 +11,9 @@ class TransactionalActionTest {
   private static final int VALUE = 1;
   private static final int ZERO = 0;
 
-  private static final TransactionalAction STRONG_READ = new TransactionalAction(KEY, 0,
-          TransactionalAction.Type.READ);
-  private static final TransactionalAction DEPENDENT_WRITE = new TransactionalAction(KEY,
-          VALUE, TransactionalAction.Type.WRITE, (s1, s2) -> s1 + s2,
-          (s1, s2) -> s1 > 0 && s2 > 0);
+  private static final TransactionalAction STRONG_READ = TransactionalAction.createTransactionalRead(KEY);
+  private static final TransactionalAction DEPENDENT_WRITE =
+          TransactionalAction.createDependentTransactionalWrite(KEY, s1 -> s1 + VALUE, s1 -> s1 > 0);
 
   @Test
   void testToString() {
