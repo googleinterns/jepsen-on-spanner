@@ -21,7 +21,6 @@ public class LinearizabilityLoadGenerator extends LoadGenerator {
   private String[] keys;
   private int valueLimit;
   private boolean allowMultiKeys;
-  private boolean allowMixedReadsWrites;
   private Random rand;
   private Config config;
 
@@ -71,13 +70,11 @@ public class LinearizabilityLoadGenerator extends LoadGenerator {
   }
 
   public LinearizabilityLoadGenerator(int opLimit, int valueLimit, String[] keys,
-                                      boolean allowMultiKeys, boolean allowMixedReadsWrites,
-                                      int ... opRatios) {
+                                      boolean allowMultiKeys, int ... opRatios) {
     super(opLimit);
     this.valueLimit = valueLimit;
     this.keys = keys;
     this.allowMultiKeys = allowMultiKeys;
-    this.allowMixedReadsWrites = allowMixedReadsWrites;
     this.config = new Config(opRatios);
   }
 
@@ -93,8 +90,7 @@ public class LinearizabilityLoadGenerator extends LoadGenerator {
       String[] keys = config.get(KEYS).split(" ");
       String[] opRatioString = config.get(OP_RATIO).split(" ");
       int[] opRatios = Arrays.stream(opRatioString).mapToInt(Integer::parseInt).toArray();
-      return new LinearizabilityLoadGenerator(opLimit, valueLimit, keys, allowMultiKeys,
-              allowMixedReadsWrites, opRatios);
+      return new LinearizabilityLoadGenerator(opLimit, valueLimit, keys, allowMultiKeys, opRatios);
     } catch (FileNotFoundException | ClassCastException e) {
       e.printStackTrace();
       throw new RuntimeException(ERR_MESSAGE + configPath);
