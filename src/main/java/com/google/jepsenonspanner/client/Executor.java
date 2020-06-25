@@ -149,12 +149,12 @@ public class Executor {
                     "CREATE TABLE " + HISTORY_TABLE_NAME + " (\n" +
                             "    " + TIME_COLUMN_NAME + "   TIMESTAMP NOT NULL\n" +
                             "    OPTIONS (allow_commit_timestamp = true),\n" +
+                            "    " + OP_NAME_COLUMN_NAME + "   STRING(MAX) NOT NULL,\n" +
+                            "    " + PID_COLUMN_NAME + "    INT64 NOT NULL,\n" +
+                            "    " + RECORD_TYPE_COLUMN_NAME + " INT64 NOT NULL,\n" +
+                            "    " + VALUE_COLUMN_NAME + "  ARRAY<STRING(MAX)>,\n" +
                             "    " + REAL_TIME_COLUMN_NAME + "   TIMESTAMP\n" +
                             "    OPTIONS (allow_commit_timestamp = true),\n" +
-                            "    " + RECORD_TYPE_COLUMN_NAME + " INT64 NOT NULL,\n" +
-                            "    " + OP_NAME_COLUMN_NAME + "   STRING(MAX) NOT NULL,\n" +
-                            "    " + VALUE_COLUMN_NAME + "  ARRAY<STRING(MAX)>,\n" +
-                            "    " + PID_COLUMN_NAME + "    INT64 NOT NULL,\n" +
                             ") PRIMARY KEY(" + TIME_COLUMN_NAME + ", " + OP_NAME_COLUMN_NAME + "," +
                             PID_COLUMN_NAME + ", " + RECORD_TYPE_COLUMN_NAME + ")",
                     "CREATE TABLE " + TESTING_TABLE_NAME + " (\n" +
@@ -352,14 +352,15 @@ public class Executor {
   private Timestamp writeRecord(String opName, List<String> representation, RecordType recordType,
                                 int staleness, Timestamp timestamp) throws RuntimeException {
     try {
-       Timestamp commitTimestamp =
-               client.write(Collections.singletonList(Mutation.newInsertBuilder(HISTORY_TABLE_NAME)
-                  .set(TIME_COLUMN_NAME).to(timestamp)
-                  .set(REAL_TIME_COLUMN_NAME).to(Value.COMMIT_TIMESTAMP)
-                  .set(RECORD_TYPE_COLUMN_NAME).to(recordType.getCode())
-                  .set(OP_NAME_COLUMN_NAME).to(opName)
-                  .set(VALUE_COLUMN_NAME).toStringArray(representation)
-                  .set(PID_COLUMN_NAME).to(processID).build()));
+      Timestamp commitTimestamp =
+             client.write(Collections.singletonList(Mutation.newInsertBuilder(HISTORY_TABLE_NAME)
+                .set(TIME_COLUMN_NAME).to(timestamp)
+                .set(REAL_TIME_COLUMN_NAME).to(Value.COMMIT_TIMESTAMP)
+                .set(RECORD_TYPE_COLUMN_NAME).to(recordType.getCode())
+                .set(OP_NAME_COLUMN_NAME).to(opName)
+                .set(VALUE_COLUMN_NAME).toStringArray(representation)
+                .set(PID_COLUMN_NAME).to(processID).build()));
+       // TODO: Consider improving the logic here so we do not need the delete
       if (staleness != 0) {
         // If this is a stale read, we need to go back and subtract that staleness from the
         // commit timestamp

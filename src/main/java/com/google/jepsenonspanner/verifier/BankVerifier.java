@@ -36,6 +36,7 @@ public class BankVerifier implements Verifier {
   // Keeps track of all possible states an invoked operation may observe. Key is a string that
   // uniquely identifies an operation that is invoked but has not been completed. Value is the
   // list of all possible states the operation may observe.
+  // TODO: Think about ways to improve the memory complexity of this algorithm
   private HashMap<String, List<HashMap<String, Long>>> concurrentTxnStates = new HashMap<>();
 
   @Override
@@ -212,15 +213,15 @@ public class BankVerifier implements Verifier {
       throw new VerifierException(TRANSFER.getName(), value);
     }
 
-    boolean invalid = true;
+    boolean valid = false;
     for (HashMap<String, Long> state : possibleStates) {
       if (state.get(fromAcct) < amount) {
         // If in any of the possible states, there exists one that would fail the transfer, the
         // history is valid
-        invalid = false;
+        valid = true;
       }
     }
-    if (invalid) {
+    if (!valid) {
       throw new VerifierException(TRANSFER.getName(), value);
     }
   }

@@ -6,9 +6,13 @@ import argparse
 
 parser = argparse.ArgumentParser(
     'Driver for Jepsen-on-Spanner testing framework.')
-parser.add_argument('--redeploy', '-r', action='store_true')
-parser.add_argument('--workers', '-w', type=int, required=True)
-parser.add_argument('--job', '-j', action='store_true')
+parser.add_argument('--redeploy', '-r', action='store_true', help='if specified, will redeploy '
+                                                                  'the program to Google Cloud '
+                                                                  'build as a docker image')
+parser.add_argument('--workers', '-w', type=int, required=True, help='number of concurrently '
+                                                                     'running workers')
+parser.add_argument('--job', '-j', action='store_true', help='if specified, will keep running '
+                                                             'till fail')
 args = parser.parse_args()
 worker_num = args.workers
 redeploy = args.redeploy
