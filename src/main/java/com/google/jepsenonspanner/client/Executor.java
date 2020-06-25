@@ -298,6 +298,7 @@ public class Executor {
           if (!row.isNull(REAL_TIME_COLUMN_NAME)) {
             realTimestamp = row.getTimestamp(REAL_TIME_COLUMN_NAME);
           }
+          List<String> originalRecordRepresentation = row.getStringList(VALUE_COLUMN_NAME);
           transaction.buffer(Arrays.asList(
                   Mutation.newInsertBuilder(HISTORY_TABLE_NAME)
                           .set(TIME_COLUMN_NAME).to(commitTimestamp)
@@ -313,27 +314,11 @@ public class Executor {
                           .set(REAL_TIME_COLUMN_NAME).to(realTimestamp)
                           .set(RECORD_TYPE_COLUMN_NAME).to(RecordType.INVOKE.getCode())
                           .set(OP_NAME_COLUMN_NAME).to(opName)
-                          .set(VALUE_COLUMN_NAME).toStringArray(recordRepresentation)
+                          .set(VALUE_COLUMN_NAME).toStringArray(originalRecordRepresentation)
                           .set(PID_COLUMN_NAME).to(processID).build()));
           return null;
         }
       });
-//      client.write(Arrays.asList(
-//              Mutation.newInsertBuilder(HISTORY_TABLE_NAME)
-//                      .set(TIME_COLUMN_NAME).to(commitTimestamp)
-//                      .set(RECORD_TYPE_COLUMN_NAME).to(RecordType.OK.getCode())
-//                      .set(OP_NAME_COLUMN_NAME).to(opName)
-//                      .set(VALUE_COLUMN_NAME).toStringArray(recordRepresentation)
-//                      .set(PID_COLUMN_NAME).to(processID).build(),
-//              Mutation.delete(HISTORY_TABLE_NAME, Key.of(invokeTimestamp, opName, processID,
-//                      RecordType.INVOKE.getCode())),
-//              // delete the old invoke record first, since key cannot be updated
-//              Mutation.newInsertBuilder(HISTORY_TABLE_NAME)
-//                      .set(TIME_COLUMN_NAME).to(commitTimestamp)
-//                      .set(RECORD_TYPE_COLUMN_NAME).to(RecordType.INVOKE.getCode())
-//                      .set(OP_NAME_COLUMN_NAME).to(opName)
-//                      .set(VALUE_COLUMN_NAME).toStringArray(recordRepresentation)
-//                      .set(PID_COLUMN_NAME).to(processID).build()));
     } catch (SpannerException e) {
       e.printStackTrace();
       throw new RuntimeException(RECORDER_ERROR);

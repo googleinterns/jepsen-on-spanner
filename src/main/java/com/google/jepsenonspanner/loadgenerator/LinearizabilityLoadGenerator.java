@@ -1,60 +1,104 @@
 package com.google.jepsenonspanner.loadgenerator;
 
+import com.google.gson.Gson;
 import com.google.jepsenonspanner.operation.Operation;
 import com.google.jepsenonspanner.operation.ReadTransaction;
 import com.google.jepsenonspanner.operation.ReadWriteTransaction;
+import com.google.jepsenonspanner.operation.TransactionalAction;
 
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileReader;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Random;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 public class LinearizabilityLoadGenerator extends LoadGenerator {
-  private List<String> keys;
+  private String[] keys;
+  private int valueLimit;
   private boolean allowMultiKeys;
   private boolean allowMixedReadsWrites;
-  private boolean allowCAS;
   private Random rand;
   private Config config;
 
-  public static class Config extends LoadRatioConfig {
-    private int read;
-    private int write;
-    private int cas;
+  private static final String OP_LIMIT = "opLimit";
+  private static final String VALUE_LIMIT = "valueLimit";
+  private static final String KEYS = "keys";
+  private static final String ALLOW_MULTI_KEY = "multiKey";
+  private static final String ALLOW_MIXED_READ_WRITE = "allowMixedReadsWrites";
+  private static final String OP_RATIO = "opRatio";
+  private static final String ERR_MESSAGE = "Error parsing config file ";
+  private static final String TXN_LOAD_NAME = "txn";
+  private static final String READ_OP_NAME = ":read";
+  private static final String WRITE_OP_NAME = ":write";
 
+  public static class Config extends LoadRatioConfig {
     public enum LoadType {
-      READ,
-      WRITE,
+      READ_ONLY,
+      WRITE_ONLY,
+      TRANSACTION,
       CAS
     }
 
-    public Config(int ... loadRatios) {
+    Config(int... loadRatios) {
       super(loadRatios);
+      // 4 types of operations
+      if (loadRatios.length != 4) {
+        throw new RuntimeException("Invalid ratio length");
+      }
     }
 
     /**
      * Given a random number by the load generator, return which load to issue
      * @param randNum random number given by generator
      */
-    public LoadType categorizeLinearizabilityLoad(int randNum) {
+    LoadType categorizeLinearizabilityLoad(int randNum) {
       switch (super.categorize(randNum)) {
         case 0:
-          return LoadType.READ;
+          return LoadType.READ_ONLY;
         case 1:
-          return LoadType.WRITE;
+          return LoadType.WRITE_ONLY;
+        case 2:
+          return LoadType.TRANSACTION;
         default:
           return LoadType.CAS;
       }
     }
   }
 
-  public LinearizabilityLoadGenerator(int opLimit, List<String> keys, boolean allowMultiKeys,
-                                      boolean allowMixedReadsWrites, boolean allowCAS,
-                                      int ... loadRatios) {
+  public LinearizabilityLoadGenerator(int opLimit, int valueLimit, String[] keys,
+                                      boolean allowMultiKeys, boolean allowMixedReadsWrites,
+                                      int ... opRatios) {
     super(opLimit);
+    this.valueLimit = valueLimit;
     this.keys = keys;
     this.allowMultiKeys = allowMultiKeys;
     this.allowMixedReadsWrites = allowMixedReadsWrites;
-    this.allowCAS = allowCAS;
-    this.config = new Config(loadRatios);
+    this.config = new Config(opRatios);
+  }
+
+  public static LinearizabilityLoadGenerator createGeneratorFromConfig(String configPath) {
+    Gson gson = new Gson();
+    try {
+      HashMap<String, String> config = gson.fromJson(new FileReader(new File(configPath)),
+              HashMap.class);
+      int opLimit = Integer.parseInt(config.get(OP_LIMIT));
+      int valueLimit = Integer.parseInt(config.get(VALUE_LIMIT));
+      boolean allowMultiKeys = Boolean.parseBoolean(config.get(ALLOW_MULTI_KEY));
+      boolean allowMixedReadsWrites = Boolean.parseBoolean(config.get(ALLOW_MIXED_READ_WRITE));
+      String[] keys = config.get(KEYS).split(" ");
+      String[] opRatioString = config.get(OP_RATIO).split(" ");
+      int[] opRatios = Arrays.stream(opRatioString).mapToInt(Integer::parseInt).toArray();
+      return new LinearizabilityLoadGenerator(opLimit, valueLimit, keys, allowMultiKeys,
+              allowMixedReadsWrites, opRatios);
+    } catch (FileNotFoundException | ClassCastException e) {
+      e.printStackTrace();
+      throw new RuntimeException(ERR_MESSAGE + configPath);
+    }
   }
 
   @Override
@@ -68,24 +112,62 @@ public class LinearizabilityLoadGenerator extends LoadGenerator {
     opLimit--;
     int nextOp = rand.nextInt();
     switch (config.categorizeLinearizabilityLoad(nextOp)) {
-      case READ:
+      case READ_ONLY:
         return read();
-      case WRITE:
+      case WRITE_ONLY:
         return write();
+      case TRANSACTION:
+        return transaction();
       default:
         return cas();
     }
   }
 
-  public ReadTransaction read() {
-    return null;
+  private List<String> selectKeys() {
+    int numKeys = 1;
+    if (allowMultiKeys) {
+      numKeys = rand.nextInt(keys.length) + 1;
+    }
+    IntStream selectedKeyIdx = rand.ints(0, keys.length).distinct().limit(numKeys);
+    return selectedKeyIdx.mapToObj(idx -> keys[idx]).collect(Collectors.toList());
   }
 
-  public ReadWriteTransaction write() {
-    return null;
+  private ReadTransaction read() {
+    List<String> selectedKeys = selectKeys();
+    List<String> representation = selectedKeys.stream().map(key -> String.format("%s %s nil",
+            READ_OP_NAME, key)).collect(Collectors.toList());
+    return ReadTransaction.createStrongRead(TXN_LOAD_NAME, selectedKeys, representation);
   }
 
-  public ReadWriteTransaction cas() {
+  private ReadWriteTransaction write() {
+    List<String> selectedKeys = selectKeys();
+    List<TransactionalAction> writes =
+            selectedKeys.stream().map(key -> TransactionalAction.createTransactionalWrite(key,
+                    rand.nextInt(valueLimit) + 1)).collect(Collectors.toList());
+    List<String> representation = writes.stream().map(action -> String.format("%s %s %d",
+            WRITE_OP_NAME, action.getKey(), action.getValue())).collect(Collectors.toList());
+    return new ReadWriteTransaction(TXN_LOAD_NAME, representation, writes);
+  }
+
+  private ReadWriteTransaction transaction() {
+    List<String> selectedKeys = selectKeys();
+    List<TransactionalAction> txns = new ArrayList<>();
+    List<String> representation = new ArrayList<>();
+    for (String key : selectedKeys) {
+      int readWriteSelect = rand.nextInt(2);
+      if (readWriteSelect == 1) {
+        txns.add(TransactionalAction.createTransactionalRead(key));
+        representation.add(String.format("%s %s nil", READ_OP_NAME, key));
+      } else {
+        int valueToWrite = rand.nextInt(valueLimit) + 1;
+        txns.add(TransactionalAction.createTransactionalWrite(key, valueToWrite));
+        representation.add(String.format("%s %s %d", WRITE_OP_NAME, key, valueToWrite));
+      }
+    }
+    return new ReadWriteTransaction(TXN_LOAD_NAME, representation, txns);
+  }
+
+  private ReadWriteTransaction cas() {
     return null;
   }
 }

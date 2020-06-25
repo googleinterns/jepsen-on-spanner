@@ -43,6 +43,12 @@ public class ReadTransaction extends Operation {
     =*/false);
   }
 
+  public static ReadTransaction createStrongRead(String loadName, List<String> keys,
+                                                 List<String> representation) {
+    return new ReadTransaction(loadName, representation, keys, /*staleness=*/0, /*bounded
+    =*/false);
+  }
+
   public static ReadTransaction createBoundedStaleRead(String loadName, List<String> keys,
                                                        int staleness) {
     return new ReadTransaction(loadName, keys, keys, staleness, /*bounded=*/true);
@@ -73,11 +79,15 @@ public class ReadTransaction extends Operation {
         Timestamp readTimeStamp = result.getRight();
 
         // Update the representation to reflect the values read
-        List<String> recordRepresentation = new ArrayList<>();
-        for (Map.Entry<String, Long> kv : keyValues.entrySet()) {
-          recordRepresentation.add(String.format("%s %d", kv.getKey(), kv.getValue()));
+        List<String> oldRecordRepresentation = getRecordRepresentation();
+        List<String> updatedRecordRepresentation = new ArrayList<>();
+        for (String repr : oldRecordRepresentation) {
+          String[] spaceSplitRepr = repr.split(" ");
+          String updatedRepr = repr.replace("nil",
+                   keyValues.get(spaceSplitRepr[spaceSplitRepr.length - 2]).toString());
+          updatedRecordRepresentation.add(updatedRepr);
         }
-        executor.recordComplete(getLoadName(), recordRepresentation, readTimeStamp,
+        executor.recordComplete(getLoadName(), updatedRecordRepresentation, readTimeStamp,
                 recordTimestamp);
       } catch (SpannerException e) {
         executor.recordInfo(getLoadName(), getRecordRepresentation());

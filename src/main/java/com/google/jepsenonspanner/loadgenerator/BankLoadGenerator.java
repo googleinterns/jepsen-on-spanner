@@ -138,9 +138,6 @@ public class BankLoadGenerator extends LoadGenerator {
       int acctNumber = Integer.parseInt(config.get(ACCT_NUMBER));
       String[] configRatioString = config.get(RATIO_CONFIG).split(" ");
       int[] configRatios = Arrays.stream(configRatioString).mapToInt(Integer::parseInt).toArray();
-      if (configRatios.length != 4) {
-        throw new RuntimeException(ERR_MSG + configPath);
-      }
       return new BankLoadGenerator(opLimit, maxBalance, acctNumber, new Config(configRatios));
     } catch (FileNotFoundException | ClassCastException e) {
       e.printStackTrace();
