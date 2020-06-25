@@ -79,7 +79,7 @@ public class TransactionalAction {
     return new TransactionalAction(key, value, Type.WRITE);
   }
 
-  public static TransactionalAction createDependentTransactionalWrite(String key, int value,
+  public static TransactionalAction createDependentTransactionalWrite(String key,
                                                                       LongUnaryOperator findDependValFunc,
                                                                       LongPredicate decideProceedFunc) {
     return new TransactionalAction(key, /*value=*/-1, Type.WRITE, null, findDependValFunc,
