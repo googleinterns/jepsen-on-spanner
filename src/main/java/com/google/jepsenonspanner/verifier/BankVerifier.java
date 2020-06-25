@@ -34,7 +34,8 @@ public class BankVerifier implements Verifier {
           Keyword.newKeyword(BankLoadGenerator.TRANSFER_LOAD_NAME.substring(1));
 
   // Keeps track of all possible states an invoked operation may observe. Key is a string that
-  // uniquely identifies an operation that is invoked but has not been completed.
+  // uniquely identifies an operation that is invoked but has not been completed. Value is the
+  // list of all possible states the operation may observe.
   private HashMap<String, List<HashMap<String, Long>>> concurrentTxnStates = new HashMap<>();
 
   @Override
@@ -60,7 +61,7 @@ public class BankVerifier implements Verifier {
       for (Map<Keyword, Object> record : records) {
         String currRecordId = recordUniqueId(record);
         if (record.get(TYPE) == INVOKE) {
-          // Add the initial possible state, which is a reference to the currently latest state
+          // Add the initial possible state, which is a reference to the currently latest state.
           concurrentTxnStates.put(currRecordId, new ArrayList<>(Collections.singleton(state)));
         } else {
           if (record.get(TYPE) == OK) {
@@ -91,6 +92,7 @@ public class BankVerifier implements Verifier {
     Keyword opName = (Keyword) record.get(OP_NAME);
     List<String> value = (List<String>) record.get(VALUE);
     if (opName.equals(READ)) {
+      // convert the read representation to only include keys
       value = value.stream().map(s -> s.split(" ")[0]).collect(Collectors.toList());
     }
     return String.format("%d %s %s", processId, opName.getName(), value.toString());
@@ -213,8 +215,8 @@ public class BankVerifier implements Verifier {
     boolean invalid = true;
     for (HashMap<String, Long> state : possibleStates) {
       if (state.get(fromAcct) < amount) {
-        // If in any of the possible states, there exists one that would fail the transfer, this
-        // is valid
+        // If in any of the possible states, there exists one that would fail the transfer, the
+        // history is valid
         invalid = false;
       }
     }
