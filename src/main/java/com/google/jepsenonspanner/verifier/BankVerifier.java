@@ -32,6 +32,9 @@ public class BankVerifier implements Verifier {
   private static Keyword READ = Keyword.newKeyword(BankLoadGenerator.READ_LOAD_NAME.substring(1));
   private static Keyword TRANSFER =
           Keyword.newKeyword(BankLoadGenerator.TRANSFER_LOAD_NAME.substring(1));
+
+  // Keeps track of all possible states an invoked operation may observe. Key is a string that
+  // uniquely identifies an operation that is invoked but has not been completed.
   private HashMap<String, List<HashMap<String, Long>>> concurrentTxnStates = new HashMap<>();
 
   @Override
@@ -57,6 +60,7 @@ public class BankVerifier implements Verifier {
       for (Map<Keyword, Object> record : records) {
         String currRecordId = recordUniqueId(record);
         if (record.get(TYPE) == INVOKE) {
+          // Add the initial possible state, which is a reference to the currently latest state
           concurrentTxnStates.put(currRecordId, new ArrayList<>(Collections.singleton(state)));
         } else {
           if (record.get(TYPE) == OK) {
@@ -64,6 +68,7 @@ public class BankVerifier implements Verifier {
           } else if (record.get(TYPE) == FAIL) {
             checkFail(record);
           }
+          // This operation is considered complete, and the map should stop tracking its states
           concurrentTxnStates.remove(currRecordId);
         }
       }
@@ -77,6 +82,10 @@ public class BankVerifier implements Verifier {
     return true;
   }
 
+  /**
+   * Convert a record to a uniquely identified string.
+   * e.g. a transfer of 10 from account 0 to 1 by thread 1 is expressed as "1 transfer [0 1 10]"
+   */
   private String recordUniqueId(Map<Keyword, Object> record) {
     long processId = (long) record.get(PROCESS);
     Keyword opName = (Keyword) record.get(OP_NAME);
@@ -110,7 +119,7 @@ public class BankVerifier implements Verifier {
    * database. Throws a VerifierException if it is invalid.
    * @param value a list of values read in the format of [["0" 20] ["1" 15]] i.e. read balance of
    *             account "0" = 20, account "1" = 15
-   * @param recordId a map of current state given all previous records
+   * @param recordId a String that uniquely identifies the current operation
    */
   private void checkOkRead(List<String> value, String recordId) throws VerifierException {
     List<HashMap<String, Long>> possibleStates = concurrentTxnStates.get(recordId);
@@ -138,7 +147,7 @@ public class BankVerifier implements Verifier {
    * Updates the state of the database given a successful transfer between 2 accounts.
    * @param value a list of values read in the format of [["0" "1" 15]] i.e. transfer 15 from
    *              account "0" to account "1"
-   * @param recordId a map of current state given all previous records
+   * @param recordId a String that uniquely identifies the current operation
    */
   private void checkOkTransfer(List<String> value, String recordId) throws VerifierException {
     String[] transferParams = value.get(0).split(" ");
@@ -190,7 +199,7 @@ public class BankVerifier implements Verifier {
    * state of the database.
    * @param value a list of values read in the format of [["0" "1" 15]] i.e. transfer 15 from
    *              account "0" to account "1"
-   * @param recordId a map of current state given all previous records
+   * @param recordId a String that uniquely identifies the current operation
    */
   private void checkFailTransfer(List<String> value, String recordId) throws VerifierException {
     String[] transferParams = value.get(0).split(" ");
