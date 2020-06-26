@@ -167,14 +167,17 @@ public class BankVerifier implements Verifier {
     // of possible states is the same reference to this latest state, we do not need to modify
     // them again
     HashMap<String, Long> latestState = possibleStatesForThisRecord.get(0);
-    // Also make a copy as the previous possible state
-    HashMap<String, Long> prevState = new HashMap<>(latestState);
+    // Previous state will only store keys that have changed values
+    HashMap<String, Long> prevState = new HashMap<>();
     long fromAcctBalance = latestState.get(fromAcct);
     if (fromAcctBalance < amount) {
       throw new VerifierException(TRANSFER.getName(), value);
     }
+    long toAcctBalance = latestState.get(toAcct);
     latestState.put(fromAcct, fromAcctBalance - amount);
-    latestState.put(toAcct, latestState.get(toAcct) + amount);
+    latestState.put(toAcct, toAcctBalance + amount);
+    prevState.put(fromAcct, fromAcctBalance);
+    prevState.put(toAcct, toAcctBalance);
 
     // Add the previous state to all possible states in the map
     for (List<HashMap<String, Long>> possibleStates : concurrentTxnStates.values()) {
@@ -215,9 +218,9 @@ public class BankVerifier implements Verifier {
 
     boolean valid = false;
     for (HashMap<String, Long> state : possibleStates) {
-      if (state.get(fromAcct) < amount) {
-        // If in any of the possible states, there exists one that would fail the transfer, the
-        // history is valid
+      if (state.containsKey(fromAcct) && state.get(fromAcct) < amount) {
+        // If in any of the possible states, there exists one value that would fail the transfer,
+        // the history is valid
         valid = true;
       }
     }
