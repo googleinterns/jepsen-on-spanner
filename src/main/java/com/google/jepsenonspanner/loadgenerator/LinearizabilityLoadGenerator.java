@@ -23,6 +23,7 @@ public class LinearizabilityLoadGenerator extends LoadGenerator {
   private boolean allowMultiKeys;
   private Random rand;
   private Config config;
+  private int seed;
 
   private static final String OP_LIMIT = "opLimit";
   private static final String VALUE_LIMIT = "valueLimit";
@@ -71,11 +72,18 @@ public class LinearizabilityLoadGenerator extends LoadGenerator {
 
   public LinearizabilityLoadGenerator(int opLimit, int valueLimit, String[] keys,
                                       boolean allowMultiKeys, int ... opRatios) {
+    this(new Random().nextInt(), opLimit, valueLimit, keys, allowMultiKeys, opRatios);
+  }
+
+  public LinearizabilityLoadGenerator(int seed, int opLimit, int valueLimit, String[] keys,
+                                      boolean allowMultiKeys, int ... opRatios) {
     super(opLimit);
     this.valueLimit = valueLimit;
     this.keys = keys;
     this.allowMultiKeys = allowMultiKeys;
     this.config = new Config(opRatios);
+    this.seed = seed;
+    this.rand = new Random(seed);
   }
 
   public static LinearizabilityLoadGenerator createGeneratorFromConfig(String configPath) {
@@ -150,8 +158,8 @@ public class LinearizabilityLoadGenerator extends LoadGenerator {
     List<TransactionalAction> txns = new ArrayList<>();
     List<String> representation = new ArrayList<>();
     for (String key : selectedKeys) {
-      int readWriteSelect = rand.nextInt(2);
-      if (readWriteSelect == 1) {
+      boolean readWriteSelect = rand.nextBoolean();
+      if (readWriteSelect) {
         txns.add(TransactionalAction.createTransactionalRead(key));
         representation.add(String.format("%s %s nil", READ_OP_NAME, key));
       } else {
