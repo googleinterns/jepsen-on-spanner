@@ -17,13 +17,17 @@ import java.util.Random;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
+/**
+ * Implements the Linearizability Load Generator. Generates two kinds of loads: transaction and
+ * compare-and-set (CAS). Transaction can be configured to generate reads and writes across
+ * multiple keys.
+ * TODO: Implement CAS, but Knossos does not support multi-CAS-register
+ */
 public class LinearizabilityLoadGenerator extends LoadGenerator {
   private String[] keys;
   private int valueLimit;
   private boolean allowMultiKeys;
-  private Random rand;
   private Config config;
-  private int seed;
 
   private static final String OP_LIMIT = "opLimit";
   private static final String VALUE_LIMIT = "valueLimit";
@@ -75,9 +79,18 @@ public class LinearizabilityLoadGenerator extends LoadGenerator {
     this(new Random().nextInt(), opLimit, valueLimit, keys, allowMultiKeys, opRatios);
   }
 
+  /**
+   * Default constructor.
+   * @param seed random seed the underlying Random object takes
+   * @param opLimit number of operations to issue on this worker
+   * @param valueLimit max value that can be written into each key
+   * @param keys an array of keys the database has
+   * @param allowMultiKeys if each operation is on multiple keys
+   * @param opRatios ratios between each operation, should have size of 4
+   */
   public LinearizabilityLoadGenerator(int seed, int opLimit, int valueLimit, String[] keys,
                                       boolean allowMultiKeys, int ... opRatios) {
-    super(opLimit);
+    super(opLimit, seed);
     this.valueLimit = valueLimit;
     this.keys = keys;
     this.allowMultiKeys = allowMultiKeys;
@@ -110,16 +123,16 @@ public class LinearizabilityLoadGenerator extends LoadGenerator {
 
     // check if reached limit
     if (opLimit <= 0) {
-      throw new RuntimeException("Bank generator has reached limit");
+      throw new RuntimeException("Linearizability generator has reached limit");
     }
 
     opLimit--;
     int nextOp = rand.nextInt();
     switch (config.categorizeLinearizabilityLoad(nextOp)) {
       case READ_ONLY:
-        return read();
+        return readOnly();
       case WRITE_ONLY:
-        return write();
+        return writeOnly();
       case TRANSACTION:
         return transaction();
       default:
@@ -127,6 +140,9 @@ public class LinearizabilityLoadGenerator extends LoadGenerator {
     }
   }
 
+  /**
+   * Returns a list of randomly selected keys to generate operation on
+   */
   private List<String> selectKeys() {
     int numKeys = 1;
     if (allowMultiKeys) {
@@ -136,18 +152,20 @@ public class LinearizabilityLoadGenerator extends LoadGenerator {
     return selectedKeyIdx.mapToObj(idx -> keys[idx]).collect(Collectors.toList());
   }
 
-  private ReadTransaction read() {
+  private ReadTransaction readOnly() {
     List<String> selectedKeys = selectKeys();
     List<String> representation = selectedKeys.stream().map(key -> String.format("%s %s nil",
             READ_OP_NAME, key)).collect(Collectors.toList());
     return ReadTransaction.createStrongRead(TXN_LOAD_NAME, selectedKeys, representation);
   }
 
-  private ReadWriteTransaction write() {
+  private ReadWriteTransaction writeOnly() {
     List<String> selectedKeys = selectKeys();
+    // Generate random values on writes
     List<TransactionalAction> writes =
             selectedKeys.stream().map(key -> TransactionalAction.createTransactionalWrite(key,
                     rand.nextInt(valueLimit) + 1)).collect(Collectors.toList());
+    // Generate the string representations
     List<String> representation = writes.stream().map(action -> String.format("%s %s %d",
             WRITE_OP_NAME, action.getKey(), action.getValue())).collect(Collectors.toList());
     return new ReadWriteTransaction(TXN_LOAD_NAME, representation, writes);
@@ -158,6 +176,7 @@ public class LinearizabilityLoadGenerator extends LoadGenerator {
     List<TransactionalAction> txns = new ArrayList<>();
     List<String> representation = new ArrayList<>();
     for (String key : selectedKeys) {
+      // A random boolean value to select between reads or writes
       boolean readWriteSelect = rand.nextBoolean();
       if (readWriteSelect) {
         txns.add(TransactionalAction.createTransactionalRead(key));
@@ -171,6 +190,7 @@ public class LinearizabilityLoadGenerator extends LoadGenerator {
     return new ReadWriteTransaction(TXN_LOAD_NAME, representation, txns);
   }
 
+  // TODO: implement
   private ReadWriteTransaction cas() {
     return null;
   }

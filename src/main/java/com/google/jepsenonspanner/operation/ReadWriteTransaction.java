@@ -8,6 +8,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.jepsenonspanner.client.Executor;
 
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Queue;
@@ -45,17 +46,21 @@ public class ReadWriteTransaction extends Operation {
   public Consumer<Executor> getExecutionPlan() {
     String currentOp = toString();
     return executor -> {
+      HashMap<String, Long> valuesRead = new HashMap<>();
       try {
         Timestamp recordTimestamp = executor.recordInvoke(getLoadName(), getRecordRepresentation());
         Timestamp commitTimestamp = executor.runTxn(new Executor.TransactionFunction() {
           @Override
           public void run(TransactionContext transaction) {
+            valuesRead.clear();
             Queue<TransactionalAction> bfs = new LinkedList<>(spannerActions);
             while (!bfs.isEmpty()) {
               TransactionalAction action = bfs.poll();
               long dependentValue = -1;
               if (action.isRead()) {
                 dependentValue = executor.executeTransactionalRead(action.getKey(), transaction);
+                action.setValue(dependentValue);
+                valuesRead.put(action.getKey(), dependentValue);
                 System.out.printf("Read key = %s, value = %s in %s\n", action.getKey(),
                         dependentValue, currentOp);
               } else {
@@ -80,6 +85,7 @@ public class ReadWriteTransaction extends Operation {
         if (failed) {
           executor.recordFail(getLoadName(), getRecordRepresentation());
         } else {
+          updateRecordRepresentation(valuesRead);
           executor.recordComplete(getLoadName(), getRecordRepresentation(), commitTimestamp,
                   recordTimestamp);
         }

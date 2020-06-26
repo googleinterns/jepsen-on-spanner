@@ -63,8 +63,6 @@ public class BankLoadGenerator extends LoadGenerator {
 
   private int maxBalance;
   private int acctNumber;
-  private Random rand;
-  private int randSeed;
   private Config config;
   private long startTime;
 
@@ -83,7 +81,7 @@ public class BankLoadGenerator extends LoadGenerator {
 
   /**
    * Constructor for the bank load generator specifying seed
-   *  @param opLimit number of operations to issue on this worker
+   * @param opLimit number of operations to issue on this worker
    * @param maxBalance the maximum balance on each account
    * @param acctNumber number of accounts
    * @param config ratio of strong read : bounded stale read : exact stale read : write
@@ -91,13 +89,12 @@ public class BankLoadGenerator extends LoadGenerator {
    */
   public BankLoadGenerator(int opLimit, int maxBalance, int acctNumber, Config config,
                            int seed) throws RuntimeException {
-    super(opLimit);
+    super(opLimit, seed);
     if (config == null) {
       throw new RuntimeException("Invalid configuration");
     }
     this.maxBalance = maxBalance;
     this.acctNumber = acctNumber;
-    this.rand = new Random(seed);
     this.config = config;
     this.startTime = System.currentTimeMillis();
     System.out.printf("Created bank generator with seed %d\n", seed);

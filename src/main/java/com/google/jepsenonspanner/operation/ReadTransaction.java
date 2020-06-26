@@ -6,11 +6,9 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.jepsenonspanner.client.Executor;
 import org.apache.commons.lang3.tuple.Pair;
 
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.function.Consumer;
 
 /**
@@ -77,17 +75,8 @@ public class ReadTransaction extends Operation {
         Pair<HashMap<String, Long>, Timestamp> result = executor.readKeys(keys, staleness, bounded);
         HashMap<String, Long> keyValues = result.getLeft();
         Timestamp readTimeStamp = result.getRight();
-
-        // Update the representation to reflect the values read
-        List<String> oldRecordRepresentation = getRecordRepresentation();
-        List<String> updatedRecordRepresentation = new ArrayList<>();
-        for (String repr : oldRecordRepresentation) {
-          String[] spaceSplitRepr = repr.split(" ");
-          String updatedRepr = repr.replace("nil",
-                   keyValues.get(spaceSplitRepr[spaceSplitRepr.length - 2]).toString());
-          updatedRecordRepresentation.add(updatedRepr);
-        }
-        executor.recordComplete(getLoadName(), updatedRecordRepresentation, readTimeStamp,
+        updateRecordRepresentation(keyValues);
+        executor.recordComplete(getLoadName(), getRecordRepresentation(), readTimeStamp,
                 recordTimestamp);
       } catch (SpannerException e) {
         executor.recordInfo(getLoadName(), getRecordRepresentation());
