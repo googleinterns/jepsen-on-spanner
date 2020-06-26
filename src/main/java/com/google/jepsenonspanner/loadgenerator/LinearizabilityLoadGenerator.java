@@ -95,8 +95,6 @@ public class LinearizabilityLoadGenerator extends LoadGenerator {
     this.keys = keys;
     this.allowMultiKeys = allowMultiKeys;
     this.config = new Config(opRatios);
-    this.seed = seed;
-    this.rand = new Random(seed);
   }
 
   public static LinearizabilityLoadGenerator createGeneratorFromConfig(String configPath) {
