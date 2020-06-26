@@ -65,6 +65,7 @@ public class Executor {
   public static final String VALUE_COLUMN_NAME = "Value";
   public static final String RECORD_TYPE_COLUMN_NAME = "OpType";
   public static final String TIME_COLUMN_NAME = "Time";
+  public static final String REAL_TIME_COLUMN_NAME = "RealTime";
   public static final String PID_COLUMN_NAME = "ProcessID";
   public static final String OP_NAME_COLUMN_NAME = "Load";
   public static final String INVOKE_STR = "invoke";
@@ -91,9 +92,9 @@ public class Executor {
 
   private enum RecordType {
     INVOKE (0),
-    OK     (1),
-    FAIL   (2),
-    INFO   (3);
+    FAIL   (1),
+    INFO   (2),
+    OK     (3);
 
     private final int code;
 
@@ -111,11 +112,11 @@ public class Executor {
       case 0:
         return INVOKE_STR;
       case 1:
-        return OK_STR;
-      case 2:
         return FAIL_STR;
-      case 3:
+      case 2:
         return INFO_STR;
+      case 3:
+        return OK_STR;
       default:
         throw new RuntimeException(RECORDER_ERROR);
     }
@@ -148,12 +149,14 @@ public class Executor {
                     "CREATE TABLE " + HISTORY_TABLE_NAME + " (\n" +
                             "    " + TIME_COLUMN_NAME + "   TIMESTAMP NOT NULL\n" +
                             "    OPTIONS (allow_commit_timestamp = true),\n" +
-                            "    " + RECORD_TYPE_COLUMN_NAME + " INT64 NOT NULL,\n" +
                             "    " + OP_NAME_COLUMN_NAME + "   STRING(MAX) NOT NULL,\n" +
-                            "    " + VALUE_COLUMN_NAME + "  ARRAY<STRING(MAX)>,\n" +
                             "    " + PID_COLUMN_NAME + "    INT64 NOT NULL,\n" +
-                            ") PRIMARY KEY(" + TIME_COLUMN_NAME + ", " + PID_COLUMN_NAME + ", " +
-                            OP_NAME_COLUMN_NAME + ", " + RECORD_TYPE_COLUMN_NAME + ")",
+                            "    " + RECORD_TYPE_COLUMN_NAME + " INT64 NOT NULL,\n" +
+                            "    " + VALUE_COLUMN_NAME + "  ARRAY<STRING(MAX)>,\n" +
+                            "    " + REAL_TIME_COLUMN_NAME + "   TIMESTAMP\n" +
+                            "    OPTIONS (allow_commit_timestamp = true),\n" +
+                            ") PRIMARY KEY(" + TIME_COLUMN_NAME + ", " + OP_NAME_COLUMN_NAME + "," +
+                            PID_COLUMN_NAME + ", " + RECORD_TYPE_COLUMN_NAME + ")",
                     "CREATE TABLE " + TESTING_TABLE_NAME + " (\n" +
                             "    " + KEY_COLUMN_NAME + "   STRING(MAX) NOT NULL,\n" +
                             "    " + VALUE_COLUMN_NAME + " INT64 NOT NULL,\n" +
@@ -284,22 +287,37 @@ public class Executor {
   public void recordComplete(String opName, List<String> recordRepresentation,
                              Timestamp commitTimestamp, Timestamp invokeTimestamp) {
     try {
-      client.write(Arrays.asList(
-              Mutation.newInsertBuilder(HISTORY_TABLE_NAME)
-                      .set(TIME_COLUMN_NAME).to(commitTimestamp)
-                      .set(RECORD_TYPE_COLUMN_NAME).to(RecordType.OK.getCode())
-                      .set(OP_NAME_COLUMN_NAME).to(opName)
-                      .set(VALUE_COLUMN_NAME).toStringArray(recordRepresentation)
-                      .set(PID_COLUMN_NAME).to(processID).build(),
-              Mutation.delete(HISTORY_TABLE_NAME, Key.of(invokeTimestamp, processID,
-                      opName, RecordType.INVOKE.getCode())),
-              // delete the old invoke record first, since key cannot be updated
-              Mutation.newInsertBuilder(HISTORY_TABLE_NAME)
-                      .set(TIME_COLUMN_NAME).to(commitTimestamp)
-                      .set(RECORD_TYPE_COLUMN_NAME).to(RecordType.INVOKE.getCode())
-                      .set(OP_NAME_COLUMN_NAME).to(opName)
-                      .set(VALUE_COLUMN_NAME).toStringArray(recordRepresentation)
-                      .set(PID_COLUMN_NAME).to(processID).build()));
+      client.readWriteTransaction().run(new TransactionRunner.TransactionCallable<Void>() {
+        @Nullable
+        @Override
+        public Void run(TransactionContext transaction) throws Exception {
+          Struct row = transaction.readRow(HISTORY_TABLE_NAME, Key.of(invokeTimestamp, opName,
+                  processID, RecordType.INVOKE.getCode()),
+                  Collections.singletonList(REAL_TIME_COLUMN_NAME));
+          Timestamp realTimestamp = null;
+          if (!row.isNull(REAL_TIME_COLUMN_NAME)) {
+            realTimestamp = row.getTimestamp(REAL_TIME_COLUMN_NAME);
+          }
+          transaction.buffer(Arrays.asList(
+                  Mutation.newInsertBuilder(HISTORY_TABLE_NAME)
+                          .set(TIME_COLUMN_NAME).to(commitTimestamp)
+                          .set(REAL_TIME_COLUMN_NAME).to(Value.COMMIT_TIMESTAMP)
+                          .set(RECORD_TYPE_COLUMN_NAME).to(RecordType.OK.getCode())
+                          .set(OP_NAME_COLUMN_NAME).to(opName)
+                          .set(VALUE_COLUMN_NAME).toStringArray(recordRepresentation)
+                          .set(PID_COLUMN_NAME).to(processID).build(),
+                  Mutation.delete(HISTORY_TABLE_NAME, Key.of(invokeTimestamp, opName, processID,
+                          RecordType.INVOKE.getCode())),
+                  Mutation.newInsertBuilder(HISTORY_TABLE_NAME)
+                          .set(TIME_COLUMN_NAME).to(commitTimestamp)
+                          .set(REAL_TIME_COLUMN_NAME).to(realTimestamp)
+                          .set(RECORD_TYPE_COLUMN_NAME).to(RecordType.INVOKE.getCode())
+                          .set(OP_NAME_COLUMN_NAME).to(opName)
+                          .set(VALUE_COLUMN_NAME).toStringArray(recordRepresentation)
+                          .set(PID_COLUMN_NAME).to(processID).build()));
+          return null;
+        }
+      });
     } catch (SpannerException e) {
       e.printStackTrace();
       throw new RuntimeException(RECORDER_ERROR);
@@ -334,13 +352,15 @@ public class Executor {
   private Timestamp writeRecord(String opName, List<String> representation, RecordType recordType,
                                 int staleness, Timestamp timestamp) throws RuntimeException {
     try {
-       Timestamp commitTimestamp =
-               client.write(Collections.singletonList(Mutation.newInsertBuilder(HISTORY_TABLE_NAME)
-                  .set(TIME_COLUMN_NAME).to(timestamp)
-                  .set(RECORD_TYPE_COLUMN_NAME).to(recordType.getCode())
-                  .set(OP_NAME_COLUMN_NAME).to(opName)
-                  .set(VALUE_COLUMN_NAME).toStringArray(representation)
-                  .set(PID_COLUMN_NAME).to(processID).build()));
+      Timestamp commitTimestamp =
+             client.write(Collections.singletonList(Mutation.newInsertBuilder(HISTORY_TABLE_NAME)
+                .set(TIME_COLUMN_NAME).to(timestamp)
+                .set(REAL_TIME_COLUMN_NAME).to(Value.COMMIT_TIMESTAMP)
+                .set(RECORD_TYPE_COLUMN_NAME).to(recordType.getCode())
+                .set(OP_NAME_COLUMN_NAME).to(opName)
+                .set(VALUE_COLUMN_NAME).toStringArray(representation)
+                .set(PID_COLUMN_NAME).to(processID).build()));
+       // TODO: Consider improving the logic here so we do not need the delete
       if (staleness != 0) {
         // If this is a stale read, we need to go back and subtract that staleness from the
         // commit timestamp
@@ -354,7 +374,7 @@ public class Executor {
                         .set(VALUE_COLUMN_NAME).toStringArray(representation)
                         .set(PID_COLUMN_NAME).to(processID).build(),
                 Mutation.delete(HISTORY_TABLE_NAME,
-                        Key.of(commitTimestamp, processID, opName, recordType.getCode()))));
+                        Key.of(commitTimestamp, opName, processID, recordType.getCode()))));
         return staleTimestamp;
       }
       return commitTimestamp;
@@ -399,7 +419,8 @@ public class Executor {
     Map<Keyword, Object> record = new HashMap<>();
     record.put(Keyword.newKeyword("type"),
             Keyword.newKeyword(recordCodeToString((int) row.getLong(RECORD_TYPE_COLUMN_NAME))));
-    record.put(Keyword.newKeyword("f"), Keyword.newKeyword(row.getString(OP_NAME_COLUMN_NAME)));
+    record.put(Keyword.newKeyword("f"),
+            Keyword.newKeyword(row.getString(OP_NAME_COLUMN_NAME).substring(1)));
     List<String> representation = row.getStringList(VALUE_COLUMN_NAME);
     String repr = Printers.printString(Printers.defaultPrinterProtocol(), representation);
     record.put(Keyword.newKeyword("value"), representation);

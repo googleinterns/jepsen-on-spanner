@@ -6,3 +6,4 @@ lib
 *.edn
 .gcloudignore
 *.json
+jobs

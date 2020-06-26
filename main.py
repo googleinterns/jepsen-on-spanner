@@ -6,16 +6,21 @@ import argparse
 
 parser = argparse.ArgumentParser(
     'Driver for Jepsen-on-Spanner testing framework.')
-parser.add_argument('--redeploy', type=bool, nargs='?', const=False)
-parser.add_argument('--workers', type=int, required=True)
-parser.add_argument('--job', type=bool, nargs='?', const=False)
+parser.add_argument('--redeploy', '-r', action='store_true', help='if specified, will redeploy '
+                                                                  'the program to Google Cloud '
+                                                                  'build as a docker image')
+parser.add_argument('--workers', '-w', type=int, required=True, help='number of concurrently '
+                                                                     'running workers')
+parser.add_argument('--job', '-j', action='store_true', help='if specified, will keep running '
+                                                             'till fail')
 args = parser.parse_args()
 worker_num = args.workers
 redeploy = args.redeploy
 is_job = args.job
+fail = False
 
 
-def run():
+def deploy():
     os.system("./gradlew shadowJar")
 
     if redeploy:
@@ -24,6 +29,8 @@ def run():
             "gcloud builds submit --tag gcr.io/jepsen-on-spanner-with-gke/jepsen-on-spanner ."
         )
 
+
+def run():
     # Run the set up:
     # 1. create the testing and history tables
     # 2. insert the initial key value pairs in init.csv
@@ -53,7 +60,7 @@ def run():
             print(fields)
             if fields[2] != "Completed":
                 in_progress = True
-                time.sleep(3)
+                time.sleep(2)
                 break
 
     output = subprocess.run(
@@ -66,17 +73,21 @@ def run():
     if "Valid!" in output:
         for i in range(1, worker_num + 1):
             os.system(f"kubectl delete job test-worker-{i}")
+        process = subprocess.Popen(["gcloud", "spanner", "databases", "delete", "test",
+                                    "--instance=jepsen"], stdin=subprocess.PIPE)
+        process.communicate(input=b'Y')
+    else:
+        global fail
+        fail = True
 
     os.system("rm -r ./jobs")
 
-    process = subprocess.Popen(["gcloud", "spanner", "databases", "delete", "test",
-                           "--instance=jepsen"], stdin=subprocess.PIPE)
-    process.communicate(input=b'Y')
 
 
+deploy()
 if is_job:
-    while True:
+    while not fail:
         run()
-        time.sleep(60)
+        time.sleep(5)
 else:
     run()
