@@ -14,6 +14,7 @@ import java.io.FileReader;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -37,7 +38,7 @@ public class BankVerifier implements Verifier {
   // uniquely identifies an operation that is invoked but has not been completed. Value is the
   // list of all possible states the operation may observe.
   // TODO: Think about ways to improve the memory complexity of this algorithm
-  private HashMap<String, List<HashMap<String, Long>>> concurrentTxnStates = new HashMap<>();
+  private HashMap<String, LinkedList<HashMap<String, Long>>> concurrentTxnStates = new HashMap<>();
 
   @Override
   public boolean verify(String filePath, Map<String, Long> state) {
@@ -63,7 +64,7 @@ public class BankVerifier implements Verifier {
         String currRecordId = recordUniqueId(record);
         if (record.get(TYPE) == INVOKE) {
           // Add the initial possible state, which is a reference to the currently latest state.
-          concurrentTxnStates.put(currRecordId, new ArrayList<>(Collections.singleton(state)));
+          concurrentTxnStates.put(currRecordId, new LinkedList<>(Collections.singleton(state)));
         } else {
           if (record.get(TYPE) == OK) {
             checkOk(record);
@@ -157,7 +158,8 @@ public class BankVerifier implements Verifier {
     String fromAcct = transferParams[0];
     String toAcct = transferParams[1];
     long amount = Long.parseLong(transferParams[2]);
-    List<HashMap<String, Long>> possibleStatesForThisRecord = concurrentTxnStates.get(recordId);
+    LinkedList<HashMap<String, Long>> possibleStatesForThisRecord =
+            concurrentTxnStates.get(recordId);
     if (possibleStatesForThisRecord.size() != 1) {
       // An ok transfer must only have one possible previous state, since the record proceeding
       // this must be a "invoke transfer"
@@ -166,7 +168,7 @@ public class BankVerifier implements Verifier {
     // Update the latest state, or the only possible state. Since the first element in each list
     // of possible states is the same reference to this latest state, we do not need to modify
     // them again
-    HashMap<String, Long> latestState = possibleStatesForThisRecord.get(0);
+    HashMap<String, Long> latestState = possibleStatesForThisRecord.peekLast();
     // Previous state will only store keys that have changed values
     HashMap<String, Long> prevState = new HashMap<>();
     long fromAcctBalance = latestState.get(fromAcct);
@@ -180,8 +182,9 @@ public class BankVerifier implements Verifier {
     prevState.put(toAcct, toAcctBalance);
 
     // Add the previous state to all possible states in the map
-    for (List<HashMap<String, Long>> possibleStates : concurrentTxnStates.values()) {
-      possibleStates.add(prevState);
+    for (LinkedList<HashMap<String, Long>> possibleStates : concurrentTxnStates.values()) {
+      // The possible states now look like delta@t0, delta@t1 ... delta@t9, latestState@t10
+      possibleStates.addFirst(prevState);
     }
   }
 
