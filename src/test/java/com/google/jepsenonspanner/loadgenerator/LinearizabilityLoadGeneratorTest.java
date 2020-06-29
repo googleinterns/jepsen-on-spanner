@@ -23,8 +23,8 @@ class LinearizabilityLoadGeneratorTest {
 
   void checkReads(boolean allowMultiKeys) {
     LoadGenerator gen = new LinearizabilityLoadGenerator(OP_LIMIT, VALUE_LIMIT,
-            KEYS.toArray(new String[0]), allowMultiKeys, /*read=*/1, /*write=*/0,
-            /*transaction=*/0, /*cas=*/0);
+            KEYS.toArray(new String[0]), allowMultiKeys, new LinearizabilityLoadGenerator.Config(/*read=*/1, /*write=*/0,
+            /*transaction=*/0, /*cas=*/0));
     while (gen.hasLoad()) {
       Operation op = gen.nextOperation();
       assertTrue(op instanceof ReadTransaction);
@@ -55,8 +55,8 @@ class LinearizabilityLoadGeneratorTest {
 
   void checkWriteOnly(boolean allowMultiKeys) {
     LoadGenerator gen = new LinearizabilityLoadGenerator(OP_LIMIT, VALUE_LIMIT,
-            KEYS.toArray(new String[0]), allowMultiKeys, /*read=*/0, /*write=*/1,
-            /*transaction=*/0, /*cas=*/0);
+            KEYS.toArray(new String[0]), allowMultiKeys, new LinearizabilityLoadGenerator.Config(/*read=*/0, /*write=*/1,
+            /*transaction=*/0, /*cas=*/0));
     while (gen.hasLoad()) {
       Operation op = gen.nextOperation();
       assertTrue(op instanceof ReadWriteTransaction);
@@ -91,8 +91,8 @@ class LinearizabilityLoadGeneratorTest {
 
   void checkTransactions(boolean allowMultiKeys) {
     LoadGenerator gen = new LinearizabilityLoadGenerator(OP_LIMIT, VALUE_LIMIT,
-            KEYS.toArray(new String[0]), allowMultiKeys, /*read=*/0, /*write=*/0,
-            /*transaction=*/1, /*cas=*/0);
+            KEYS.toArray(new String[0]), allowMultiKeys, new LinearizabilityLoadGenerator.Config(/*read=*/0, /*write=*/0,
+            /*transaction=*/1, /*cas=*/0));
     while (gen.hasLoad()) {
       Operation op = gen.nextOperation();
       assertTrue(op instanceof ReadWriteTransaction);
@@ -123,7 +123,8 @@ class LinearizabilityLoadGeneratorTest {
     for (int i = 0; i < 10; i++) {
       generators.add(new LinearizabilityLoadGenerator(seed, OP_LIMIT, VALUE_LIMIT,
               KEYS.toArray(new String[0]), /*allowMultiKeys=*/true,
-              /*read=*/1, /*write=*/1, /*transaction=*/1, /*cas=*/0));
+              new LinearizabilityLoadGenerator.Config(/*read=*/1, /*write=*/1, /*transaction=*/1,
+                      /*cas=*/0)));
     }
 
     for (int i = 0; i < OP_LIMIT; i++) {

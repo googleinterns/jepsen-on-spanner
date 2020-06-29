@@ -32,7 +32,7 @@ public abstract class LoadRatioConfig {
         return i;
       }
     }
-    // This should not happen; fall back to generate the first load type
-    return 0;
+    // This should not happen
+    throw new RuntimeException("Error in categorizing randNum " + randNum);
   }
 }
