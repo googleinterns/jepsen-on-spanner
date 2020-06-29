@@ -183,7 +183,7 @@ public class BankVerifier implements Verifier {
 
     // Add the previous state to all possible states in the map
     for (LinkedList<HashMap<String, Long>> possibleStates : concurrentTxnStates.values()) {
-      // The possible states now look like delta@t0, delta@t1 ... delta@t9, latestState@t10
+      // The possible states now look like latestState@t10, delta@t9, ..., delta@t2, delta@t1
       possibleStates.add(1, prevState);
     }
   }
