@@ -168,7 +168,7 @@ public class BankVerifier implements Verifier {
     // Update the latest state, or the only possible state. Since the first element in each list
     // of possible states is the same reference to this latest state, we do not need to modify
     // them again
-    HashMap<String, Long> latestState = possibleStatesForThisRecord.peekLast();
+    HashMap<String, Long> latestState = possibleStatesForThisRecord.peekFirst();
     // Previous state will only store keys that have changed values
     HashMap<String, Long> prevState = new HashMap<>();
     long fromAcctBalance = latestState.get(fromAcct);
@@ -184,7 +184,7 @@ public class BankVerifier implements Verifier {
     // Add the previous state to all possible states in the map
     for (LinkedList<HashMap<String, Long>> possibleStates : concurrentTxnStates.values()) {
       // The possible states now look like delta@t0, delta@t1 ... delta@t9, latestState@t10
-      possibleStates.addFirst(prevState);
+      possibleStates.add(1, prevState);
     }
   }
 
