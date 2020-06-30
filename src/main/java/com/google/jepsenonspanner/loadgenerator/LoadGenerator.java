@@ -2,6 +2,8 @@ package com.google.jepsenonspanner.loadgenerator;
 
 import com.google.jepsenonspanner.operation.Operation;
 
+import java.util.Random;
+
 /**
  * A load generator generates testing load for the client to interact with the Spanner instance.
  * Each generator must implement this interface
@@ -10,9 +12,17 @@ import com.google.jepsenonspanner.operation.Operation;
 public abstract class LoadGenerator {
 
   protected int opLimit = 0;
+  protected Random rand;
+  protected int seed;
 
   public LoadGenerator(int opLimit) {
+    this(opLimit, new Random().nextInt());
+  }
+
+  public LoadGenerator(int opLimit, int seed) {
     this.opLimit = opLimit;
+    this.seed = seed;
+    this.rand = new Random(seed);
   }
 
   /**

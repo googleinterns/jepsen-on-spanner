@@ -2,7 +2,9 @@ package com.google.jepsenonspanner.operation;
 
 import com.google.jepsenonspanner.client.Executor;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Consumer;
 
 /**
@@ -38,6 +40,22 @@ public abstract class Operation {
 
   public List<String> getRecordRepresentation() {
     return recordRepresentation;
+  }
+
+  /**
+   * Updates all the nil fields in the string representations to the values read.
+   * We assume that the representation will end with "... [key] [value or "nil"]".
+   */
+  void updateRecordRepresentation(Map<String, Long> readResults) {
+    // Update the representation to reflect the values read
+    List<String> updatedRecordRepresentation = new ArrayList<>();
+    for (String repr : recordRepresentation) {
+      String[] spaceSplitRepr = repr.split(" ");
+      String updatedRepr = repr.replace("nil",
+              readResults.get(spaceSplitRepr[spaceSplitRepr.length - 2]).toString());
+      updatedRecordRepresentation.add(updatedRepr);
+    }
+    recordRepresentation = updatedRecordRepresentation;
   }
 
   @Override
