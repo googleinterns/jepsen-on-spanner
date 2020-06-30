@@ -76,11 +76,11 @@ public class BankVerifier implements Verifier {
       }
     } catch (VerifierException e) {
       System.out.println("Current possible state maps is: " + concurrentTxnStates.toString());
-      System.out.println("Invalid operation found at " + e.getMessage());
+      System.out.println(INVALID_INFO + e.getMessage());
       return false;
     }
 
-    System.out.println("Valid!");
+    System.out.println(VALID_INFO);
     return true;
   }
 

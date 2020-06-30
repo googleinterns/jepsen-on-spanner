@@ -19,6 +19,8 @@ public interface Verifier {
   static final Keyword FAIL = Keyword.newKeyword(Executor.FAIL_STR);
   static final Keyword INFO = Keyword.newKeyword(Executor.INFO_STR);
 
+  final String VALID_INFO = "Valid!";
+  final String INVALID_INFO = "Invalid operation found at ";
 
   /**
    * Given the path to a history file and a map of initial state of the database, checks if the
