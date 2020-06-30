@@ -298,6 +298,7 @@ public class Executor {
           if (!row.isNull(REAL_TIME_COLUMN_NAME)) {
             realTimestamp = row.getTimestamp(REAL_TIME_COLUMN_NAME);
           }
+          List<String> originalRecordRepresentation = row.getStringList(VALUE_COLUMN_NAME);
           transaction.buffer(Arrays.asList(
                   Mutation.newInsertBuilder(HISTORY_TABLE_NAME)
                           .set(TIME_COLUMN_NAME).to(commitTimestamp)
@@ -313,7 +314,7 @@ public class Executor {
                           .set(REAL_TIME_COLUMN_NAME).to(realTimestamp)
                           .set(RECORD_TYPE_COLUMN_NAME).to(RecordType.INVOKE.getCode())
                           .set(OP_NAME_COLUMN_NAME).to(opName)
-                          .set(VALUE_COLUMN_NAME).toStringArray(recordRepresentation)
+                          .set(VALUE_COLUMN_NAME).toStringArray(originalRecordRepresentation)
                           .set(PID_COLUMN_NAME).to(processID).build()));
           return null;
         }

@@ -6,11 +6,9 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.jepsenonspanner.client.Executor;
 import org.apache.commons.lang3.tuple.Pair;
 
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.function.Consumer;
 
 /**
@@ -43,6 +41,12 @@ public class ReadTransaction extends Operation {
     =*/false);
   }
 
+  public static ReadTransaction createStrongRead(String loadName, List<String> keys,
+                                                 List<String> representation) {
+    return new ReadTransaction(loadName, representation, keys, /*staleness=*/0, /*bounded
+    =*/false);
+  }
+
   public static ReadTransaction createBoundedStaleRead(String loadName, List<String> keys,
                                                        int staleness) {
     return new ReadTransaction(loadName, keys, keys, staleness, /*bounded=*/true);
@@ -71,13 +75,8 @@ public class ReadTransaction extends Operation {
         Pair<HashMap<String, Long>, Timestamp> result = executor.readKeys(keys, staleness, bounded);
         HashMap<String, Long> keyValues = result.getLeft();
         Timestamp readTimeStamp = result.getRight();
-
-        // Update the representation to reflect the values read
-        List<String> recordRepresentation = new ArrayList<>();
-        for (Map.Entry<String, Long> kv : keyValues.entrySet()) {
-          recordRepresentation.add(String.format("%s %d", kv.getKey(), kv.getValue()));
-        }
-        executor.recordComplete(getLoadName(), recordRepresentation, readTimeStamp,
+        updateRecordRepresentation(keyValues);
+        executor.recordComplete(getLoadName(), getRecordRepresentation(), readTimeStamp,
                 recordTimestamp);
       } catch (SpannerException e) {
         executor.recordInfo(getLoadName(), getRecordRepresentation());
