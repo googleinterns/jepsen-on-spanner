@@ -9,18 +9,18 @@ import java.util.List;
  */
 public class VerifierException extends Exception {
   private String opName;
-  private List<String> representation;
+  private List<List<Object>> representation;
 
   public String getOpName() {
     return opName;
   }
 
-  public List<String> getRepresentation() {
+  public List<List<Object>> getRepresentation() {
     return representation;
   }
 
-  VerifierException(String opName, List<String> representation) {
-    super(opName + " " + String.valueOf(representation));
+  VerifierException(String opName, List<List<Object>> representation) {
+    super(opName + " " + representation);
     this.opName = opName;
     this.representation = representation;
   }

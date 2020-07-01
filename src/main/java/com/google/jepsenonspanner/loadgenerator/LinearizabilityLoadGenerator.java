@@ -36,7 +36,7 @@ public class LinearizabilityLoadGenerator extends LoadGenerator {
   private static final String ALLOW_MIXED_READ_WRITE = "allowMixedReadsWrites";
   private static final String OP_RATIO = "opRatio";
   private static final String ERR_MESSAGE = "Error parsing config file ";
-  private static final String TXN_LOAD_NAME = "txn";
+  private static final String TXN_LOAD_NAME = "0txn";
   private static final String READ_OP_NAME = ":read";
   private static final String WRITE_OP_NAME = ":write";
 
@@ -105,7 +105,6 @@ public class LinearizabilityLoadGenerator extends LoadGenerator {
       int opLimit = Integer.parseInt(config.get(OP_LIMIT));
       int valueLimit = Integer.parseInt(config.get(VALUE_LIMIT));
       boolean allowMultiKeys = Boolean.parseBoolean(config.get(ALLOW_MULTI_KEY));
-      boolean allowMixedReadsWrites = Boolean.parseBoolean(config.get(ALLOW_MIXED_READ_WRITE));
       String[] keys = config.get(KEYS).split(" ");
       String[] opRatioString = config.get(OP_RATIO).split(" ");
       int[] opRatios = Arrays.stream(opRatioString).mapToInt(Integer::parseInt).toArray();
@@ -154,7 +153,7 @@ public class LinearizabilityLoadGenerator extends LoadGenerator {
   private ReadTransaction readOnly() {
     List<String> selectedKeys = selectKeys();
     List<String> representation = selectedKeys.stream().map(key -> String.format("%s %s nil",
-            READ_OP_NAME, key)).collect(Collectors.toList());
+            READ_OP_NAME, convertKeyToEdnKeyword(key))).collect(Collectors.toList());
     return ReadTransaction.createStrongRead(TXN_LOAD_NAME, selectedKeys, representation);
   }
 
@@ -166,7 +165,7 @@ public class LinearizabilityLoadGenerator extends LoadGenerator {
                     rand.nextInt(valueLimit) + 1)).collect(Collectors.toList());
     // Generate the string representations
     List<String> representation = writes.stream().map(action -> String.format("%s %s %d",
-            WRITE_OP_NAME, action.getKey(), action.getValue())).collect(Collectors.toList());
+            WRITE_OP_NAME, convertKeyToEdnKeyword(action.getKey()), action.getValue())).collect(Collectors.toList());
     return new ReadWriteTransaction(TXN_LOAD_NAME, representation, writes);
   }
 
@@ -179,11 +178,11 @@ public class LinearizabilityLoadGenerator extends LoadGenerator {
       boolean readWriteSelect = rand.nextBoolean();
       if (readWriteSelect) {
         txns.add(TransactionalAction.createTransactionalRead(key));
-        representation.add(String.format("%s %s nil", READ_OP_NAME, key));
+        representation.add(String.format("%s %s nil", READ_OP_NAME, convertKeyToEdnKeyword(key)));
       } else {
         int valueToWrite = rand.nextInt(valueLimit) + 1;
         txns.add(TransactionalAction.createTransactionalWrite(key, valueToWrite));
-        representation.add(String.format("%s %s %d", WRITE_OP_NAME, key, valueToWrite));
+        representation.add(String.format("%s %s %d", WRITE_OP_NAME, convertKeyToEdnKeyword(key), valueToWrite));
       }
     }
     return new ReadWriteTransaction(TXN_LOAD_NAME, representation, txns);
@@ -192,5 +191,10 @@ public class LinearizabilityLoadGenerator extends LoadGenerator {
   // TODO: implement
   private ReadWriteTransaction cas() {
     throw new UnsupportedOperationException();
+  }
+
+  /** Convert this key to a representation that can be stored in history table */
+  private String convertKeyToEdnKeyword(String key) {
+    return ":" + key;
   }
 }

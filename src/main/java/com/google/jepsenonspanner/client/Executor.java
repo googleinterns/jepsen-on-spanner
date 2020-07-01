@@ -1,5 +1,6 @@
 package com.google.jepsenonspanner.client;
 
+import clojure.java.api.Clojure;
 import com.google.api.gax.longrunning.OperationFuture;
 import com.google.cloud.Timestamp;
 import com.google.cloud.spanner.Database;
@@ -25,8 +26,12 @@ import com.google.cloud.spanner.Value;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.jepsenonspanner.operation.OperationException;
 import com.google.spanner.admin.database.v1.CreateDatabaseMetadata;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
 import us.bpsm.edn.Keyword;
+import us.bpsm.edn.parser.Parseable;
+import us.bpsm.edn.parser.Parser;
+import us.bpsm.edn.parser.Parsers;
 import us.bpsm.edn.printer.Printers;
 
 import javax.annotation.Nullable;
@@ -293,7 +298,7 @@ public class Executor {
         public Void run(TransactionContext transaction) throws Exception {
           Struct row = transaction.readRow(HISTORY_TABLE_NAME, Key.of(invokeTimestamp, opName,
                   processID, RecordType.INVOKE.getCode()),
-                  Collections.singletonList(REAL_TIME_COLUMN_NAME));
+                  Arrays.asList(REAL_TIME_COLUMN_NAME, VALUE_COLUMN_NAME));
           Timestamp realTimestamp = null;
           if (!row.isNull(REAL_TIME_COLUMN_NAME)) {
             realTimestamp = row.getTimestamp(REAL_TIME_COLUMN_NAME);
@@ -423,8 +428,19 @@ public class Executor {
     record.put(Keyword.newKeyword("f"),
             Keyword.newKeyword(row.getString(OP_NAME_COLUMN_NAME).substring(1)));
     List<String> representation = row.getStringList(VALUE_COLUMN_NAME);
-    String repr = Printers.printString(Printers.defaultPrinterProtocol(), representation);
-    record.put(Keyword.newKeyword("value"), representation);
+    List<List<Object>> value = new ArrayList<>();
+    Parser p = Parsers.newParser(Parsers.defaultConfiguration());
+    for (String repr : representation) {
+      String[] reprSplit = repr.split(" ");
+      List<Object> currentRepr = new ArrayList<>();
+      for (String split : reprSplit) {
+        // Parse user defined representations as EDN compatible data structures
+        Parseable pbr = Parsers.newParseable(split);
+        currentRepr.add(p.nextValue(pbr));
+      }
+      value.add(currentRepr);
+    }
+    record.put(Keyword.newKeyword("value"), value);
     record.put(Keyword.newKeyword("process"), row.getLong(PID_COLUMN_NAME));
     return record;
   }

@@ -29,18 +29,6 @@ public class ReadTransaction extends Operation {
     this.bounded = bounded;
   }
 
-  /**
-   * Creates a strong read. Note that the representation is initialized as the same as the keys.
-   * This is because there will be no values read initially, so only keys are present in the
-   * representations in the history table; they will be updated once the read returns.
-   * @param loadName
-   * @param keys
-   */
-  public static ReadTransaction createStrongRead(String loadName, List<String> keys) {
-    return new ReadTransaction(loadName, keys, keys, /*staleness=*/0, /*bounded
-    =*/false);
-  }
-
   public static ReadTransaction createStrongRead(String loadName, List<String> keys,
                                                  List<String> representation) {
     return new ReadTransaction(loadName, representation, keys, /*staleness=*/0, /*bounded
@@ -48,13 +36,15 @@ public class ReadTransaction extends Operation {
   }
 
   public static ReadTransaction createBoundedStaleRead(String loadName, List<String> keys,
+                                                       List<String> representation,
                                                        int staleness) {
-    return new ReadTransaction(loadName, keys, keys, staleness, /*bounded=*/true);
+    return new ReadTransaction(loadName, representation, keys, staleness, /*bounded=*/true);
   }
 
   public static ReadTransaction createExactStaleRead(String loadName, List<String> keys,
+                                                     List<String> representation,
                                                      int staleness) {
-    return new ReadTransaction(loadName, keys, keys, staleness, /*bounded=*/false);
+    return new ReadTransaction(loadName, representation, keys, staleness, /*bounded=*/false);
   }
 
   /**

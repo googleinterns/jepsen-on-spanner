@@ -13,10 +13,13 @@ parser.add_argument('--workers', '-w', type=int, required=True, help='number of 
                                                                      'running workers')
 parser.add_argument('--job', '-j', action='store_true', help='if specified, will keep running '
                                                              'till fail')
+parser.add_argument('--delete', '-d', action='store_true', help='if specified, will clean up '
+                                                                'workers and spanner database')
 args = parser.parse_args()
 worker_num = args.workers
 redeploy = args.redeploy
 is_job = args.job
+delete = args.delete
 fail = False
 
 
@@ -71,23 +74,29 @@ def run():
     print(output)
 
     if "Valid!" in output:
-        for i in range(1, worker_num + 1):
-            os.system(f"kubectl delete job test-worker-{i}")
-        process = subprocess.Popen(["gcloud", "spanner", "databases", "delete", "test",
-                                    "--instance=jepsen"], stdin=subprocess.PIPE)
-        process.communicate(input=b'Y')
+        clean_up()
     else:
         global fail
         fail = True
 
+
+def clean_up():
+    global worker_num
+    for i in range(1, worker_num + 1):
+        os.system(f"kubectl delete job test-worker-{i}")
+    process = subprocess.Popen(["gcloud", "spanner", "databases", "delete", "test",
+                                "--instance=jepsen"], stdin=subprocess.PIPE)
+    process.communicate(input=b'Y')
     os.system("rm -r ./jobs")
 
 
-
-deploy()
-if is_job:
-    while not fail:
-        run()
-        time.sleep(5)
+if delete:
+    clean_up()
 else:
-    run()
+    deploy()
+    if is_job:
+        while not fail:
+            run()
+            time.sleep(5)
+    else:
+        run()

@@ -4,9 +4,11 @@ import com.beust.jcommander.Parameter;
 import com.beust.jcommander.ParameterException;
 import com.google.jepsenonspanner.client.Executor;
 import com.google.jepsenonspanner.loadgenerator.BankLoadGenerator;
+import com.google.jepsenonspanner.loadgenerator.LinearizabilityLoadGenerator;
 import com.google.jepsenonspanner.loadgenerator.LoadGenerator;
 import com.google.jepsenonspanner.operation.Operation;
 import com.google.jepsenonspanner.verifier.BankVerifier;
+import com.google.jepsenonspanner.verifier.KnossosVerifier;
 import com.google.jepsenonspanner.verifier.Verifier;
 
 import java.io.IOException;
@@ -132,7 +134,7 @@ public class JepsenOnSpanner {
    * Creates a generator and execute its loads.
    */
   private void runWorkload(Executor executor) {
-    LoadGenerator gen = BankLoadGenerator.createGeneratorFromConfig(configPath);
+    LoadGenerator gen = LinearizabilityLoadGenerator.createGeneratorFromConfig(configPath);
     while (gen.hasLoad()) {
       Operation op = gen.nextOperation();
       System.out.println("Generated op " + op.toString());
@@ -146,7 +148,7 @@ public class JepsenOnSpanner {
    */
   private void verifyHistory(Executor executor) {
     executor.extractHistory();
-    Verifier v = new BankVerifier();
+    Verifier v = new KnossosVerifier();
     if (initValuePath != null) {
       v.verify(HISTORY_PATH, retrieveInitialState(initValuePath));
     } else {

@@ -48,11 +48,17 @@ public abstract class Operation {
    */
   void updateRecordRepresentation(Map<String, Long> readResults) {
     // Update the representation to reflect the values read
+    if (readResults.isEmpty()) {
+      return;
+    }
     List<String> updatedRecordRepresentation = new ArrayList<>();
+    System.out.println(readResults);
     for (String repr : recordRepresentation) {
       String[] spaceSplitRepr = repr.split(" ");
       String updatedRepr = repr.replace("nil",
-              readResults.get(spaceSplitRepr[spaceSplitRepr.length - 2]).toString());
+              // Strip all characters added to represent EDN variables
+              String.valueOf(readResults.getOrDefault(spaceSplitRepr[spaceSplitRepr.length - 2].replaceAll(
+                      "[\"|:]", ""), null)));
       updatedRecordRepresentation.add(updatedRepr);
     }
     recordRepresentation = updatedRecordRepresentation;
