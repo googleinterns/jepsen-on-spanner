@@ -36,7 +36,13 @@ public class LinearizabilityLoadGenerator extends LoadGenerator {
   private static final String ALLOW_MIXED_READ_WRITE = "allowMixedReadsWrites";
   private static final String OP_RATIO = "opRatio";
   private static final String ERR_MESSAGE = "Error parsing config file ";
-  private static final String TXN_LOAD_NAME = "0txn";
+
+  // Added numbers in the front to break tie when transactions happen at the same time so that
+  // verifier correctly identifies a valid history
+  private static final String WRITE_LOAD_NAME = "0txn";
+  private static final String TXN_LOAD_NAME = "1txn";
+  private static final String READ_LOAD_NAME = "2txn";
+
   private static final String READ_OP_NAME = ":read";
   private static final String WRITE_OP_NAME = ":write";
 
@@ -154,7 +160,7 @@ public class LinearizabilityLoadGenerator extends LoadGenerator {
     List<String> selectedKeys = selectKeys();
     List<String> representation = selectedKeys.stream().map(key -> String.format("%s %s nil",
             READ_OP_NAME, convertKeyToEdnKeyword(key))).collect(Collectors.toList());
-    return ReadTransaction.createStrongRead(TXN_LOAD_NAME, selectedKeys, representation);
+    return ReadTransaction.createStrongRead(READ_LOAD_NAME, selectedKeys, representation);
   }
 
   private ReadWriteTransaction writeOnly() {
@@ -166,7 +172,7 @@ public class LinearizabilityLoadGenerator extends LoadGenerator {
     // Generate the string representations
     List<String> representation = writes.stream().map(action -> String.format("%s %s %d",
             WRITE_OP_NAME, convertKeyToEdnKeyword(action.getKey()), action.getValue())).collect(Collectors.toList());
-    return new ReadWriteTransaction(TXN_LOAD_NAME, representation, writes);
+    return new ReadWriteTransaction(WRITE_LOAD_NAME, representation, writes);
   }
 
   private ReadWriteTransaction transaction() {

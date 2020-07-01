@@ -25,9 +25,6 @@ public class IntegratedTest {
     executor = new Executor("jepsen-on-spanner-with-gke", "jepsen", "example-db", 0, /*init=*/true);
     executor.createTables();
     HashMap<String, Long> initialValues = new HashMap(Map.of("x", 0, "y", 0));
-//    for (int i = 0; i < 5; i++) {
-//      initialValues.put(String.valueOf(i), 20L);
-//    }
     executor.initKeyValues(initialValues);
     LoadGenerator gen = LinearizabilityLoadGenerator.createGeneratorFromConfig("test-config.json");
     while (gen.hasLoad()) {

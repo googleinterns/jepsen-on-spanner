@@ -136,7 +136,7 @@ public class BankLoadGenerator extends LoadGenerator {
     =*/1, /*exactStaleRead=*/1, /*transfer=*/2), randSeed);
   }
 
-  public static BankLoadGenerator createGeneratorFromConfig(String configPath) {
+  public static LoadGenerator createGeneratorFromConfig(String configPath) {
     Gson gson = new Gson();
     try {
       HashMap<String, String> config = gson.fromJson(new FileReader(new File(configPath)),
