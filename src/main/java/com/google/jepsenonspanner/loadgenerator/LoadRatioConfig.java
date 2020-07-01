@@ -25,6 +25,7 @@ public abstract class LoadRatioConfig {
 
   public int categorize(int randNum) {
     int currDistributionSum = distributionSum;
+    // Ensure that the mod result is positive
     randNum = Math.floorMod(randNum, distributionSum);
     for (int i = ratios.length - 1; i >= 0; i--) {
       currDistributionSum -= ratios[i];
