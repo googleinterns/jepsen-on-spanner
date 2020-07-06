@@ -24,7 +24,7 @@ public class ReadWriteTransaction extends Operation {
   private List<TransactionalAction> spannerActions;
   private boolean failed;
 
-  public ReadWriteTransaction(String loadName, List<String> recordRepresentation,
+  public ReadWriteTransaction(String loadName, List<OpRepresentation> recordRepresentation,
                               List<TransactionalAction> spannerActions) {
     super(loadName, recordRepresentation);
     this.spannerActions = spannerActions;

@@ -1,6 +1,7 @@
 package com.google.jepsenonspanner.loadgenerator;
 
 import com.google.gson.Gson;
+import com.google.jepsenonspanner.operation.OpRepresentation;
 import com.google.jepsenonspanner.operation.Operation;
 import com.google.jepsenonspanner.operation.ReadTransaction;
 import com.google.jepsenonspanner.operation.ReadWriteTransaction;
@@ -11,6 +12,7 @@ import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Random;
@@ -158,8 +160,12 @@ public class LinearizabilityLoadGenerator extends LoadGenerator {
 
   private ReadTransaction readOnly() {
     List<String> selectedKeys = selectKeys();
-    List<String> representation = selectedKeys.stream().map(key -> String.format("%s %s nil",
-            READ_OP_NAME, convertKeyToEdnKeyword(key))).collect(Collectors.toList());
+    List<OpRepresentation> representation = new ArrayList<>();
+    for (String key : selectedKeys) {
+      OpRepresentation repr = OpRepresentation.createReadRepresentation(READ_OP_NAME,
+              convertKeyToEdnKeyword(key));
+      representation.add(repr);
+    }
     return ReadTransaction.createStrongRead(READ_LOAD_NAME, selectedKeys, representation);
   }
 
@@ -170,25 +176,31 @@ public class LinearizabilityLoadGenerator extends LoadGenerator {
             selectedKeys.stream().map(key -> TransactionalAction.createTransactionalWrite(key,
                     rand.nextInt(valueLimit) + 1)).collect(Collectors.toList());
     // Generate the string representations
-    List<String> representation = writes.stream().map(action -> String.format("%s %s %d",
-            WRITE_OP_NAME, convertKeyToEdnKeyword(action.getKey()), action.getValue())).collect(Collectors.toList());
+    List<OpRepresentation> representation = new ArrayList<>();
+    for (TransactionalAction write : writes) {
+      OpRepresentation repr = OpRepresentation.createOtherRepresentation(WRITE_OP_NAME,
+              convertKeyToEdnKeyword(write.getKey()), String.valueOf(write.getValue()));
+      representation.add(repr);
+    }
     return new ReadWriteTransaction(WRITE_LOAD_NAME, representation, writes);
   }
 
   private ReadWriteTransaction transaction() {
     List<String> selectedKeys = selectKeys();
     List<TransactionalAction> txns = new ArrayList<>();
-    List<String> representation = new ArrayList<>();
+    List<OpRepresentation> representation = new ArrayList<>();
     for (String key : selectedKeys) {
       // A random boolean value to select between reads or writes
       boolean readWriteSelect = rand.nextBoolean();
       if (readWriteSelect) {
         txns.add(TransactionalAction.createTransactionalRead(key));
-        representation.add(String.format("%s %s nil", READ_OP_NAME, convertKeyToEdnKeyword(key)));
+        representation.add(OpRepresentation.createReadRepresentation(READ_OP_NAME,
+                convertKeyToEdnKeyword(key)));
       } else {
         int valueToWrite = rand.nextInt(valueLimit) + 1;
         txns.add(TransactionalAction.createTransactionalWrite(key, valueToWrite));
-        representation.add(String.format("%s %s %d", WRITE_OP_NAME, convertKeyToEdnKeyword(key), valueToWrite));
+        representation.add(OpRepresentation.createOtherRepresentation(WRITE_OP_NAME,
+                convertKeyToEdnKeyword(key), String.valueOf(valueToWrite)));
       }
     }
     return new ReadWriteTransaction(TXN_LOAD_NAME, representation, txns);

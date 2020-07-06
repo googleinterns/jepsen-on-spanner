@@ -1,6 +1,7 @@
 package com.google.jepsenonspanner.loadgenerator;
 
 import com.google.gson.Gson;
+import com.google.jepsenonspanner.operation.OpRepresentation;
 import com.google.jepsenonspanner.operation.Operation;
 import com.google.jepsenonspanner.operation.ReadTransaction;
 import com.google.jepsenonspanner.operation.ReadWriteTransaction;
@@ -67,7 +68,7 @@ public class BankLoadGenerator extends LoadGenerator {
   private Config config;
   private long startTime;
   private List<String> keys;
-  private List<String> readKeyRepresentation;
+  private List<OpRepresentation> readKeyRepresentation;
 
   private static final long MAX_MILLISECOND_PAST = 5 * 60 * 1000; // 5 minutes
 
@@ -102,7 +103,7 @@ public class BankLoadGenerator extends LoadGenerator {
     this.startTime = System.currentTimeMillis();
     this.keys = IntStream.range(0, acctNumber).mapToObj(String::valueOf).collect(Collectors.toList());
     this.readKeyRepresentation =
-            this.keys.stream().map(key -> convertKeyToEdnString(key) + " nil").collect(
+            this.keys.stream().map(key -> OpRepresentation.createReadRepresentation(convertKeyToEdnString(key))).collect(
             Collectors.toList());
     System.out.printf("Created bank generator with seed %d\n", seed);
   }
@@ -213,8 +214,11 @@ public class BankLoadGenerator extends LoadGenerator {
                     balance -> true);
     transaction.get(1).setDependentAction(acct2Write);
 
-    return new ReadWriteTransaction(TRANSFER_LOAD_NAME, Collections.singletonList(String.format(
-            "%s %s %d", convertKeyToEdnString(acct1), convertKeyToEdnString(acct2), transferAmount)), transaction);
+    List<OpRepresentation> repr = Collections.singletonList(
+            OpRepresentation.createOtherRepresentation(convertKeyToEdnString(acct1)
+                    , convertKeyToEdnString(acct2), String.valueOf(transferAmount)));
+
+    return new ReadWriteTransaction(TRANSFER_LOAD_NAME, repr, transaction);
   }
 
   /** Convert this key to a representation that can be stored in history table */

@@ -21,8 +21,8 @@ public class ReadTransaction extends Operation {
   private int staleness;
   private boolean bounded;
 
-  public ReadTransaction(String loadName, List<String> recordRepresentation, List<String> keys,
-                         int staleness, boolean bounded) {
+  public ReadTransaction(String loadName, List<OpRepresentation> recordRepresentation,
+                         List<String> keys, int staleness, boolean bounded) {
     super(loadName, recordRepresentation);
     this.keys = keys;
     this.staleness = staleness;
@@ -30,19 +30,19 @@ public class ReadTransaction extends Operation {
   }
 
   public static ReadTransaction createStrongRead(String loadName, List<String> keys,
-                                                 List<String> representation) {
+                                                 List<OpRepresentation> representation) {
     return new ReadTransaction(loadName, representation, keys, /*staleness=*/0, /*bounded
     =*/false);
   }
 
   public static ReadTransaction createBoundedStaleRead(String loadName, List<String> keys,
-                                                       List<String> representation,
+                                                       List<OpRepresentation> representation,
                                                        int staleness) {
     return new ReadTransaction(loadName, representation, keys, staleness, /*bounded=*/true);
   }
 
   public static ReadTransaction createExactStaleRead(String loadName, List<String> keys,
-                                                     List<String> representation,
+                                                     List<OpRepresentation> representation,
                                                      int staleness) {
     return new ReadTransaction(loadName, representation, keys, staleness, /*bounded=*/false);
   }

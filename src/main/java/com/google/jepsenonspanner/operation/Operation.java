@@ -15,9 +15,9 @@ import java.util.function.Consumer;
 public abstract class Operation {
 
   private String loadName;
-  private List<String> recordRepresentation;
+  private List<OpRepresentation> recordRepresentation;
 
-  public Operation(String loadName, List<String> recordRepresentation) {
+  public Operation(String loadName, List<OpRepresentation> recordRepresentation) {
     this.loadName = loadName;
     this.recordRepresentation = recordRepresentation;
   }
@@ -38,8 +38,12 @@ public abstract class Operation {
     return loadName;
   }
 
-  public List<String> getRecordRepresentation() {
-    return recordRepresentation;
+  public List<List<String>> getRecordRepresentation() {
+    List<List<String>> representation = new ArrayList<>();
+    for (OpRepresentation rep : recordRepresentation) {
+      representation.add(rep.getRepresentation());
+    }
+    return representation;
   }
 
   /**
@@ -51,17 +55,13 @@ public abstract class Operation {
     if (readResults.isEmpty()) {
       return;
     }
-    List<String> updatedRecordRepresentation = new ArrayList<>();
     System.out.println(readResults);
-    for (String repr : recordRepresentation) {
-      String[] spaceSplitRepr = repr.split(" ");
-      String updatedRepr = repr.replace("nil",
-              // Strip all characters added to represent EDN variables
-              String.valueOf(readResults.getOrDefault(spaceSplitRepr[spaceSplitRepr.length - 2].replaceAll(
-                      "[\"|:]", ""), null)));
-      updatedRecordRepresentation.add(updatedRepr);
+    for (OpRepresentation repr : recordRepresentation) {
+      if (repr.isRead()) {
+        long readValue = readResults.get(repr.getPureKey());
+        repr.setReadValue(readValue);
+      }
     }
-    recordRepresentation = updatedRecordRepresentation;
   }
 
   @Override
