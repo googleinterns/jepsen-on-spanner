@@ -40,6 +40,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -79,7 +80,10 @@ public class Executor {
   public static final String FAIL_STR = "fail";
   public static final String INFO_STR = "info";
   public static final String RECORD_FILENAME = "history.edn";
+  public static final String RECORD_BY_REAL_TIME_FILENAME = "history-real-time.edn";
   public static final String RECORDER_ERROR = "RECORDER ERROR";
+  private static final Keyword TIMESTAMP_KEYWORD = Keyword.newKeyword("timestamp");
+  private static final Keyword REAL_TIME_KEYWORD = Keyword.newKeyword("realTime");
 
   /**
    * Functional interface that will be implemented by user of Executor.runTxn. This function will
@@ -445,6 +449,8 @@ public class Executor {
     }
     record.put(Keyword.newKeyword("value"), value);
     record.put(Keyword.newKeyword("process"), row.getLong(PID_COLUMN_NAME));
+    record.put(Keyword.newKeyword("timestamp"), row.getTimestamp(TIME_COLUMN_NAME));
+    record.put(Keyword.newKeyword("realTime"), row.getTimestamp(REAL_TIME_COLUMN_NAME));
     return record;
   }
 
@@ -461,6 +467,45 @@ public class Executor {
         Map<Keyword, Object> record = convertToMap(resultSet.getCurrentRowAsStruct());
         records.add(record);
       }
+      recordWriter.write(Printers.printString(Printers.prettyPrinterProtocol(), records));
+    } catch (IOException e) {
+      throw new RuntimeException(RECORDER_ERROR);
+    }
+  }
+
+  /**
+   * Converts a row of History table into a Map that will be written into the edn file.
+   */
+  private Map<Keyword, Object> convertToMapWithTimestamp(Struct row) {
+    Map<Keyword, Object> record = convertToMap(row);
+    record.put(TIMESTAMP_KEYWORD, row.getTimestamp(TIME_COLUMN_NAME));
+    record.put(REAL_TIME_KEYWORD, row.getTimestamp(REAL_TIME_COLUMN_NAME));
+    return record;
+  }
+
+  /**
+   * Extracts all history records and save it on a local edn file.
+   */
+  public void extractHistoryOrderedByRealTime() {
+    try (ResultSet resultSet = client.singleUse().read(HISTORY_TABLE_NAME, KeySet.all(),
+            Arrays.asList(RECORD_TYPE_COLUMN_NAME, OP_NAME_COLUMN_NAME, VALUE_COLUMN_NAME,
+                    PID_COLUMN_NAME, TIME_COLUMN_NAME, REAL_TIME_COLUMN_NAME));
+         FileWriter recordWriter = new FileWriter(RECORD_BY_REAL_TIME_FILENAME)) {
+      List<Map<Keyword, Object>> records = new ArrayList<>();
+      while (resultSet.next()) {
+        Map<Keyword, Object> record = convertToMapWithTimestamp(resultSet.getCurrentRowAsStruct());
+        records.add(record);
+      }
+      Comparator<Map<Keyword, Object>> comparator = new Comparator<Map<Keyword, Object>>() {
+        @Override
+        public int compare(Map<Keyword, Object> record1, Map<Keyword, Object> record2) {
+          Timestamp timestamp1 = (Timestamp) record1.get(TIMESTAMP_KEYWORD);
+          if (record1.containsKey(REAL_TIME_KEYWORD)) {
+            timestamp1 =
+          }
+          return 0;
+        }
+      };
       recordWriter.write(Printers.printString(Printers.prettyPrinterProtocol(), records));
     } catch (IOException e) {
       throw new RuntimeException(RECORDER_ERROR);
