@@ -56,7 +56,10 @@ public class Record implements Comparable<Record> {
     this.realTimestamp = realTimestamp;
   }
 
-  public static Record createRecordWithoutTimestamp(Struct row) {
+  /**
+   * Creates a record that leaves the two timestamp fields null.
+   */
+  static Record createRecordWithoutTimestamp(Struct row) {
     String type = recordCodeToString((int) row.getLong(RECORD_TYPE_COLUMN_NAME));
     String load = row.getString(OP_NAME_COLUMN_NAME).substring(1);
     long pID = row.getLong(PID_COLUMN_NAME);
@@ -77,8 +80,15 @@ public class Record implements Comparable<Record> {
     =*/null);
   }
 
-  public static Record createRecordWithTimestamp(Struct row) {
+  /**
+   * Creates a record that attempts to fill the timestamp fields. Assuming that the row struct
+   * has these fields.
+   */
+  static Record createRecordWithTimestamp(Struct row) {
     Record record = createRecordWithoutTimestamp(row);
+    if (row.isNull(TIME_COLUMN_NAME)) {
+      throw new RuntimeException("Record cannot be created with a timestamp");
+    }
     record.commitTimestamp = row.getTimestamp(TIME_COLUMN_NAME);
     if (!row.isNull(REAL_TIME_COLUMN_NAME)) {
       record.realTimestamp = row.getTimestamp(REAL_TIME_COLUMN_NAME);
@@ -97,7 +107,7 @@ public class Record implements Comparable<Record> {
       case 3:
         return OK_STR;
       default:
-        throw new RuntimeException(RECORDER_ERROR);
+        throw new RuntimeException("Error parsing type code");
     }
   }
 
@@ -115,6 +125,9 @@ public class Record implements Comparable<Record> {
     return realTimestamp == null ? commitTimestamp : realTimestamp;
   }
 
+  /**
+   * Converts this instance to a map to be printed to an EDN file.
+   */
   private Map<Keyword, Object> getEdnRecord() {
     return Map.of(
       TYPE_KEYWORD, Keyword.newKeyword(type),
@@ -124,10 +137,16 @@ public class Record implements Comparable<Record> {
     );
   }
 
+  /**
+   * Returns a function that tells EDN printer to customly print this class.
+   */
   static Printer.Fn<Record> getPrintFunction() {
     return (self, printer) -> printer.printValue(self.getEdnRecord());
   }
 
+  /**
+   * Returns a EDN printing protocol that includes the function to print this class.
+   */
   static Protocol<Printer.Fn<?>> getPrettyPrintProtocol() {
     return Printers.prettyProtocolBuilder().put(Record.class, getPrintFunction()).build();
   }
