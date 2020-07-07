@@ -12,7 +12,6 @@ import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Random;
@@ -40,11 +39,12 @@ public class LinearizabilityLoadGenerator extends LoadGenerator {
   private static final String ERR_MESSAGE = "Error parsing config file ";
 
   // Added numbers in the front to break tie when transactions happen at the same time so that
-  // verifier correctly identifies a valid history
-  private static final String WRITE_LOAD_NAME = "0txn";
-  private static final String TXN_LOAD_NAME = "1txn";
-  private static final String READ_LOAD_NAME = "2txn";
+  // verifier correctly identifies a valid history; this is for the type column of the history
+  private static final String WRITE_ONLY_LOAD_NAME = "0txn";
+  private static final String READ_WRITE_LOAD_NAME = "1txn";
+  private static final String READ_ONLY_LOAD_NAME = "2txn";
 
+  // These strings are for the string representation column i.e. a read will look like :read :x nil
   private static final String READ_OP_NAME = ":read";
   private static final String WRITE_OP_NAME = ":write";
 
@@ -166,7 +166,7 @@ public class LinearizabilityLoadGenerator extends LoadGenerator {
               convertKeyToEdnKeyword(key));
       representation.add(repr);
     }
-    return ReadTransaction.createStrongRead(READ_LOAD_NAME, selectedKeys, representation);
+    return ReadTransaction.createStrongRead(READ_ONLY_LOAD_NAME, selectedKeys, representation);
   }
 
   private ReadWriteTransaction writeOnly() {
@@ -182,7 +182,7 @@ public class LinearizabilityLoadGenerator extends LoadGenerator {
               convertKeyToEdnKeyword(write.getKey()), String.valueOf(write.getValue()));
       representation.add(repr);
     }
-    return new ReadWriteTransaction(WRITE_LOAD_NAME, representation, writes);
+    return new ReadWriteTransaction(WRITE_ONLY_LOAD_NAME, representation, writes);
   }
 
   private ReadWriteTransaction transaction() {
@@ -203,7 +203,7 @@ public class LinearizabilityLoadGenerator extends LoadGenerator {
                 convertKeyToEdnKeyword(key), String.valueOf(valueToWrite)));
       }
     }
-    return new ReadWriteTransaction(TXN_LOAD_NAME, representation, txns);
+    return new ReadWriteTransaction(READ_WRITE_LOAD_NAME, representation, txns);
   }
 
   // TODO: implement

@@ -32,14 +32,7 @@ public class KnossosVerifier implements Verifier {
   }
 
   private boolean verify(PersistentVector history, Map<String, Long> initialState) {
-    // Convert the initialState to a Clojure formatted map
-    // Note that any Clojure data structures must be created by Clojure.read
-    StringBuilder sb = new StringBuilder("{");
-    for (Map.Entry<String, Long> initialKVs : initialState.entrySet()) {
-      sb.append(String.format(":%s %d, ", initialKVs.getKey(), initialKVs.getValue()));
-    }
-    sb.append("}");
-    String initialStateInClojure = sb.toString();
+    String initialStateInClojure = convertStateToClojureString(initialState);
     require.invoke(Clojure.read(KNOSSOS_COMPETITION));
     require.invoke(Clojure.read(KNOSSOS_MODEL));
     IFn analysis = Clojure.var(KNOSSOS_COMPETITION, "analysis");
@@ -56,5 +49,18 @@ public class KnossosVerifier implements Verifier {
               ":value")));
     }
     return result;
+  }
+
+  /**
+   * Convert the initialState to a Clojure formatted map.
+   * Note that any Clojure data structures must be created by Clojure.read
+   */
+  private String convertStateToClojureString(Map<String, Long> state) {
+    StringBuilder sb = new StringBuilder("{");
+    for (Map.Entry<String, Long> initialKVs : state.entrySet()) {
+      sb.append(String.format(":%s %d, ", initialKVs.getKey(), initialKVs.getValue()));
+    }
+    sb.append("}");
+    return sb.toString();
   }
 }

@@ -11,6 +11,7 @@ import com.google.jepsenonspanner.verifier.BankVerifier;
 import com.google.jepsenonspanner.verifier.KnossosVerifier;
 import com.google.jepsenonspanner.verifier.Verifier;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
@@ -20,10 +21,29 @@ import java.util.Map;
 public class IntegratedTest {
   Executor executor;
 
-  @Test
-  void testGenerateLoad() {
+  @BeforeEach
+  void setUpExecutor() {
     executor = new Executor("jepsen-on-spanner-with-gke", "jepsen", "example-db", 0, /*init=*/true);
     executor.createTables();
+  }
+
+  @Test
+  void testBankBenchmark() {
+    HashMap<String, Long> initialValues = new HashMap(Map.of("0", 10, "1", 0));
+    executor.initKeyValues(initialValues);
+    LoadGenerator gen = new BankLoadGenerator(50, 100, 5, 1);
+    while (gen.hasLoad()) {
+      Operation op = gen.nextOperation();
+      System.out.printf("Generated op %s", op.toString());
+      op.getExecutionPlan().accept(executor);
+    }
+    executor.extractHistory();
+    Verifier v = new BankVerifier();
+    v.verify("history.edn", initialValues);
+  }
+
+  @Test
+  void testLinearizabilityBenchmark() {
     HashMap<String, Long> initialValues = new HashMap(Map.of("x", 0, "y", 0));
     executor.initKeyValues(initialValues);
     LoadGenerator gen = LinearizabilityLoadGenerator.createGeneratorFromConfig("test-config.json");

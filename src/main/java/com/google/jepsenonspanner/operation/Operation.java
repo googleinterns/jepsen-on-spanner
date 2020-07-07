@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
 
 /**
  * An Operation encapsulates a unit of load that should be executed atomically by the
@@ -38,12 +39,11 @@ public abstract class Operation {
     return loadName;
   }
 
-  public List<List<String>> getRecordRepresentation() {
-    List<List<String>> representation = new ArrayList<>();
-    for (OpRepresentation rep : recordRepresentation) {
-      representation.add(rep.getRepresentation());
-    }
-    return representation;
+  /**
+   * Returns the recordRepresentation in their string format.
+   */
+  public List<String> getRecordRepresentation() {
+    return recordRepresentation.stream().map(OpRepresentation::toString).collect(Collectors.toList());
   }
 
   /**
