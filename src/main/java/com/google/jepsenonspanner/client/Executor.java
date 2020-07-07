@@ -75,10 +75,6 @@ public class Executor {
   public static final String REAL_TIME_COLUMN_NAME = "RealTime";
   public static final String PID_COLUMN_NAME = "ProcessID";
   public static final String OP_NAME_COLUMN_NAME = "Load";
-  public static final String INVOKE_STR = "invoke";
-  public static final String OK_STR = "ok";
-  public static final String FAIL_STR = "fail";
-  public static final String INFO_STR = "info";
   public static final String RECORD_FILENAME = "history.edn";
   public static final String RECORD_BY_REAL_TIME_FILENAME = "history-real-time.edn";
   public static final String RECORDER_ERROR = "RECORDER ERROR";

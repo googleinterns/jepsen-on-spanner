@@ -15,14 +15,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import static com.google.jepsenonspanner.client.Executor.FAIL_STR;
-import static com.google.jepsenonspanner.client.Executor.INFO_STR;
-import static com.google.jepsenonspanner.client.Executor.INVOKE_STR;
-import static com.google.jepsenonspanner.client.Executor.OK_STR;
 import static com.google.jepsenonspanner.client.Executor.OP_NAME_COLUMN_NAME;
 import static com.google.jepsenonspanner.client.Executor.PID_COLUMN_NAME;
 import static com.google.jepsenonspanner.client.Executor.REAL_TIME_COLUMN_NAME;
-import static com.google.jepsenonspanner.client.Executor.RECORDER_ERROR;
 import static com.google.jepsenonspanner.client.Executor.RECORD_TYPE_COLUMN_NAME;
 import static com.google.jepsenonspanner.client.Executor.TIME_COLUMN_NAME;
 import static com.google.jepsenonspanner.client.Executor.VALUE_COLUMN_NAME;
@@ -33,19 +28,23 @@ import static com.google.jepsenonspanner.client.Executor.VALUE_COLUMN_NAME;
  * printer protocol for the Java-EDN api.
  */
 public class Record implements Comparable<Record> {
-  private String type;
-  private String load;
+  private Keyword type;
+  private Keyword load;
   private List<List<Object>> representation;
   private long pID;
   private Timestamp commitTimestamp;
   private Timestamp realTimestamp;
 
-  private static final Keyword TYPE_KEYWORD = Keyword.newKeyword("type");
-  private static final Keyword LOAD_KEYWORD = Keyword.newKeyword("f");
-  private static final Keyword REPR_KEYWORD = Keyword.newKeyword("value");
-  private static final Keyword PID_KEYWORD = Keyword.newKeyword("process");
+  public static final Keyword TYPE_KEYWORD = Keyword.newKeyword("type");
+  public static final Keyword LOAD_KEYWORD = Keyword.newKeyword("f");
+  public static final Keyword REPR_KEYWORD = Keyword.newKeyword("value");
+  public static final Keyword PID_KEYWORD = Keyword.newKeyword("process");
+  public static final Keyword INVOKE_STR = Keyword.newKeyword("invoke");
+  public static final Keyword OK_STR = Keyword.newKeyword("ok");
+  public static final Keyword FAIL_STR = Keyword.newKeyword("fail");
+  public static final Keyword INFO_STR = Keyword.newKeyword("info");
 
-  private Record(String type, String load,
+  private Record(Keyword type, Keyword load,
                  List<List<Object>> representation, long pID,
                  Timestamp commitTimestamp, Timestamp realTimestamp) {
     this.type = type;
@@ -60,7 +59,7 @@ public class Record implements Comparable<Record> {
    * Creates a record that leaves the two timestamp fields null.
    */
   static Record createRecordWithoutTimestamp(Struct row) {
-    String type = recordCodeToString((int) row.getLong(RECORD_TYPE_COLUMN_NAME));
+    Keyword type = recordCodeToString((int) row.getLong(RECORD_TYPE_COLUMN_NAME));
     String load = row.getString(OP_NAME_COLUMN_NAME).substring(1);
     long pID = row.getLong(PID_COLUMN_NAME);
     List<List<Object>> representation = new ArrayList<>();
@@ -76,8 +75,8 @@ public class Record implements Comparable<Record> {
       }
       representation.add(currentRepr);
     }
-    return new Record(type, load, representation, pID, /*commitTimestamp=*/null, /*realTimestamp
-    =*/null);
+    return new Record(type, Keyword.newKeyword(load), representation, pID, /*commitTimestamp
+    =*/null, /*realTimestamp=*/null);
   }
 
   /**
@@ -96,7 +95,13 @@ public class Record implements Comparable<Record> {
     return record;
   }
 
-  private static String recordCodeToString(int code) throws RuntimeException {
+  public static Record createRecordFromMap(Map<Keyword, Object> map) {
+    return new Record((Keyword) map.get(TYPE_KEYWORD), (Keyword) map.get(LOAD_KEYWORD),
+            (List<List<Object>>) map.get(REPR_KEYWORD), (long) map.get(PID_KEYWORD),
+            /*commitTimestamp=*/null, /*realTimestamp=*/null);
+  }
+
+  private static Keyword recordCodeToString(int code) throws RuntimeException {
     switch (code) {
       case 0:
         return INVOKE_STR;
@@ -130,8 +135,8 @@ public class Record implements Comparable<Record> {
    */
   private Map<Keyword, Object> getEdnRecord() {
     return Map.of(
-      TYPE_KEYWORD, Keyword.newKeyword(type),
-      LOAD_KEYWORD, Keyword.newKeyword(load),
+      TYPE_KEYWORD, type,
+      LOAD_KEYWORD, load,
       REPR_KEYWORD, representation,
       PID_KEYWORD, pID
     );
@@ -149,5 +154,21 @@ public class Record implements Comparable<Record> {
    */
   static Protocol<Printer.Fn<?>> getPrettyPrintProtocol() {
     return Printers.prettyProtocolBuilder().put(Record.class, getPrintFunction()).build();
+  }
+
+  public Keyword getType() {
+    return type;
+  }
+
+  public Keyword getLoad() {
+    return load;
+  }
+
+  public List<List<Object>> getRepresentation() {
+    return representation;
+  }
+
+  public long getpID() {
+    return pID;
   }
 }
