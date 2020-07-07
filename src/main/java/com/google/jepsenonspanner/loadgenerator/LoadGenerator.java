@@ -41,12 +41,12 @@ public abstract class LoadGenerator {
     return opLimit > 0;
   }
 
-  public static LoadGenerator createGenerator(String benchmarkType, String filePath) {
+  public static LoadGenerator createGenerator(String benchmarkType, String configFilePath) {
     switch (benchmarkType) {
       case BANK_TYPE:
-        return BankLoadGenerator.createGeneratorFromConfig(filePath);
+        return BankLoadGenerator.createGeneratorFromConfig(configFilePath);
       case LINEARIZABILITY_TYPE:
-        return LinearizabilityLoadGenerator.createGeneratorFromConfig(filePath);
+        return LinearizabilityLoadGenerator.createGeneratorFromConfig(configFilePath);
       default:
         throw new RuntimeException(INVALID_TYPE_MSG);
     }
