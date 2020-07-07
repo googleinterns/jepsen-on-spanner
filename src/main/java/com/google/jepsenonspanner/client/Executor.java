@@ -117,21 +117,6 @@ public class Executor {
     }
   }
 
-  private String recordCodeToString(int code) throws RuntimeException {
-    switch (code) {
-      case 0:
-        return INVOKE_STR;
-      case 1:
-        return FAIL_STR;
-      case 2:
-        return INFO_STR;
-      case 3:
-        return OK_STR;
-      default:
-        throw new RuntimeException(RECORDER_ERROR);
-    }
-  }
-
   public Executor(String projectId, String instanceId, String dbId, int processID, boolean init) {
     SpannerOptions options =
             SpannerOptions.newBuilder().setProjectId(projectId).build();
@@ -426,35 +411,6 @@ public class Executor {
   }
 
   /**
-   * Converts a row of History table into a Map that will be written into the edn file.
-   */
-  private Map<Keyword, Object> convertToMap(Struct row) {
-    Map<Keyword, Object> record = new HashMap<>();
-    record.put(Keyword.newKeyword("type"),
-            Keyword.newKeyword(recordCodeToString((int) row.getLong(RECORD_TYPE_COLUMN_NAME))));
-    record.put(Keyword.newKeyword("f"),
-            Keyword.newKeyword(row.getString(OP_NAME_COLUMN_NAME).substring(1)));
-    List<String> representation = row.getStringList(VALUE_COLUMN_NAME);
-    List<List<Object>> value = new ArrayList<>();
-    Parser p = Parsers.newParser(Parsers.defaultConfiguration());
-    for (String repr : representation) {
-      String[] reprSplit = repr.split(" ");
-      List<Object> currentRepr = new ArrayList<>();
-      for (String split : reprSplit) {
-        // Parse user defined representations as EDN compatible data structures
-        Parseable pbr = Parsers.newParseable(split);
-        currentRepr.add(p.nextValue(pbr));
-      }
-      value.add(currentRepr);
-    }
-    record.put(Keyword.newKeyword("value"), value);
-    record.put(Keyword.newKeyword("process"), row.getLong(PID_COLUMN_NAME));
-    record.put(Keyword.newKeyword("timestamp"), row.getTimestamp(TIME_COLUMN_NAME));
-    record.put(Keyword.newKeyword("realTime"), row.getTimestamp(REAL_TIME_COLUMN_NAME));
-    return record;
-  }
-
-  /**
    * Extracts all history records and save it on a local edn file.
    */
   public void extractHistory() {
@@ -462,25 +418,15 @@ public class Executor {
             Arrays.asList(RECORD_TYPE_COLUMN_NAME, OP_NAME_COLUMN_NAME, VALUE_COLUMN_NAME,
                     PID_COLUMN_NAME));
          FileWriter recordWriter = new FileWriter(RECORD_FILENAME)) {
-      List<Map<Keyword, Object>> records = new ArrayList<>();
+      List<Record> records = new ArrayList<>();
       while (resultSet.next()) {
-        Map<Keyword, Object> record = convertToMap(resultSet.getCurrentRowAsStruct());
+        Record record = Record.createRecordWithoutTimestamp(resultSet.getCurrentRowAsStruct());
         records.add(record);
       }
-      recordWriter.write(Printers.printString(Printers.prettyPrinterProtocol(), records));
+      recordWriter.write(Printers.printString(Record.getPrettyPrintProtocol(), records));
     } catch (IOException e) {
       throw new RuntimeException(RECORDER_ERROR);
     }
-  }
-
-  /**
-   * Converts a row of History table into a Map that will be written into the edn file.
-   */
-  private Map<Keyword, Object> convertToMapWithTimestamp(Struct row) {
-    Map<Keyword, Object> record = convertToMap(row);
-    record.put(TIMESTAMP_KEYWORD, row.getTimestamp(TIME_COLUMN_NAME));
-    record.put(REAL_TIME_KEYWORD, row.getTimestamp(REAL_TIME_COLUMN_NAME));
-    return record;
   }
 
   /**
@@ -491,22 +437,13 @@ public class Executor {
             Arrays.asList(RECORD_TYPE_COLUMN_NAME, OP_NAME_COLUMN_NAME, VALUE_COLUMN_NAME,
                     PID_COLUMN_NAME, TIME_COLUMN_NAME, REAL_TIME_COLUMN_NAME));
          FileWriter recordWriter = new FileWriter(RECORD_BY_REAL_TIME_FILENAME)) {
-      List<Map<Keyword, Object>> records = new ArrayList<>();
+      List<Record> records = new ArrayList<>();
       while (resultSet.next()) {
-        Map<Keyword, Object> record = convertToMapWithTimestamp(resultSet.getCurrentRowAsStruct());
+        Record record = Record.createRecordWithTimestamp(resultSet.getCurrentRowAsStruct());
         records.add(record);
       }
-      Comparator<Map<Keyword, Object>> comparator = new Comparator<Map<Keyword, Object>>() {
-        @Override
-        public int compare(Map<Keyword, Object> record1, Map<Keyword, Object> record2) {
-          Timestamp timestamp1 = (Timestamp) record1.get(TIMESTAMP_KEYWORD);
-          if (record1.containsKey(REAL_TIME_KEYWORD)) {
-            timestamp1 =
-          }
-          return 0;
-        }
-      };
-      recordWriter.write(Printers.printString(Printers.prettyPrinterProtocol(), records));
+      Collections.sort(records);
+      recordWriter.write(Printers.printString(Record.getPrettyPrintProtocol(), records));
     } catch (IOException e) {
       throw new RuntimeException(RECORDER_ERROR);
     }
