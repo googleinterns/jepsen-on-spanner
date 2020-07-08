@@ -42,8 +42,8 @@ public abstract class Operation {
   /**
    * Returns the recordRepresentation in their string format.
    */
-  public List<String> getRecordRepresentation() {
-    return recordRepresentation.stream().map(OpRepresentation::toString).collect(Collectors.toList());
+  public List<OpRepresentation> getRecordRepresentation() {
+    return recordRepresentation;
   }
 
   /**

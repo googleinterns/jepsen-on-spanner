@@ -2,6 +2,7 @@ package com.google.jepsenonspanner.client;
 
 import com.google.cloud.Timestamp;
 import com.google.cloud.spanner.Struct;
+import com.google.jepsenonspanner.operation.OpRepresentation;
 import us.bpsm.edn.Keyword;
 import us.bpsm.edn.parser.Parseable;
 import us.bpsm.edn.parser.Parser;
@@ -14,6 +15,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import static com.google.jepsenonspanner.client.Executor.OP_NAME_COLUMN_NAME;
 import static com.google.jepsenonspanner.client.Executor.PID_COLUMN_NAME;
@@ -30,7 +32,7 @@ import static com.google.jepsenonspanner.client.Executor.VALUE_COLUMN_NAME;
 public class Record implements Comparable<Record> {
   private Keyword type;
   private Keyword load;
-  private List<List<Object>> representation;
+  private List<OpRepresentation> representation;
   private long pID;
   private Timestamp commitTimestamp;
   private Timestamp realTimestamp;
@@ -46,7 +48,7 @@ public class Record implements Comparable<Record> {
   public static final Keyword INFO_STR = Keyword.newKeyword("info");
 
   private Record(Keyword type, Keyword load,
-                 List<List<Object>> representation, long pID,
+                 List<OpRepresentation> representation, long pID,
                  Timestamp commitTimestamp, Timestamp realTimestamp) {
     this.type = type;
     this.load = load;
@@ -63,20 +65,12 @@ public class Record implements Comparable<Record> {
     Keyword type = recordCodeToString((int) row.getLong(RECORD_TYPE_COLUMN_NAME));
     String load = row.getString(OP_NAME_COLUMN_NAME).substring(1);
     long pID = row.getLong(PID_COLUMN_NAME);
-    List<List<Object>> representation = new ArrayList<>();
-    List<String> value = row.getStringList(VALUE_COLUMN_NAME);
-    Parser p = Parsers.newParser(Parsers.defaultConfiguration());
-    for (String repr : value) {
-      String[] reprSplit = repr.split(" ");
-      List<Object> currentRepr = new ArrayList<>();
-      for (String split : reprSplit) {
-        // Parse user defined representations as EDN compatible data structures
-        Parseable pbr = Parsers.newParseable(split);
-        currentRepr.add(p.nextValue(pbr));
-      }
-      representation.add(currentRepr);
-    }
-    return new Record(type, Keyword.newKeyword(load), representation, pID, /*commitTimestamp
+    List<String> representation = row.getStringList(VALUE_COLUMN_NAME);
+    // Create OpRepresentations from the concatenated strings
+    List<OpRepresentation> value =
+            representation.stream().map(OpRepresentation::createOtherRepresentation).collect(
+                    Collectors.toList());
+    return new Record(type, Keyword.newKeyword(load), value, pID, /*commitTimestamp
     =*/null, /*realTimestamp=*/null);
   }
 
@@ -98,7 +92,7 @@ public class Record implements Comparable<Record> {
 
   public static Record createRecordFromMap(Map<Keyword, Object> map) {
     return new Record((Keyword) map.get(TYPE_KEYWORD), (Keyword) map.get(LOAD_KEYWORD),
-            (List<List<Object>>) map.get(REPR_KEYWORD), (long) map.get(PID_KEYWORD),
+            (List<OpRepresentation>) map.get(REPR_KEYWORD), (long) map.get(PID_KEYWORD),
             (Timestamp) map.get(COMMIT_TIMESTAMP_KEYWORD), /*realTimestamp=*/null);
   }
 
