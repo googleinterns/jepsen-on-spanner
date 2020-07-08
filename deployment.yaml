@@ -14,5 +14,5 @@ spec:
           command: ["java"]
           args: ["-jar","Jepsen-on-spanner.jar","--project","jepsen-on-spanner-with-gke",
                  "--instance","jepsen","--database","test","--component","WORKER","--pID","$PID",
-                 "--config-file","test-config.json"]
+                 "--config-file","test-config.json","--benchmark-type","$BENCHMARK"]
       restartPolicy: Never

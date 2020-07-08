@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
 
 /**
  * An Operation encapsulates a unit of load that should be executed atomically by the
@@ -15,9 +16,9 @@ import java.util.function.Consumer;
 public abstract class Operation {
 
   private String loadName;
-  private List<String> recordRepresentation;
+  private List<OpRepresentation> recordRepresentation;
 
-  public Operation(String loadName, List<String> recordRepresentation) {
+  public Operation(String loadName, List<OpRepresentation> recordRepresentation) {
     this.loadName = loadName;
     this.recordRepresentation = recordRepresentation;
   }
@@ -38,7 +39,10 @@ public abstract class Operation {
     return loadName;
   }
 
-  public List<String> getRecordRepresentation() {
+  /**
+   * Returns the recordRepresentation in their string format.
+   */
+  public List<OpRepresentation> getRecordRepresentation() {
     return recordRepresentation;
   }
 
@@ -48,14 +52,16 @@ public abstract class Operation {
    */
   void updateRecordRepresentation(Map<String, Long> readResults) {
     // Update the representation to reflect the values read
-    List<String> updatedRecordRepresentation = new ArrayList<>();
-    for (String repr : recordRepresentation) {
-      String[] spaceSplitRepr = repr.split(" ");
-      String updatedRepr = repr.replace("nil",
-              readResults.get(spaceSplitRepr[spaceSplitRepr.length - 2]).toString());
-      updatedRecordRepresentation.add(updatedRepr);
+    if (readResults.isEmpty()) {
+      return;
     }
-    recordRepresentation = updatedRecordRepresentation;
+    System.out.println(readResults);
+    for (OpRepresentation repr : recordRepresentation) {
+      if (repr.isRead()) {
+        long readValue = readResults.get(repr.getPureKey());
+        repr.setReadValue(readValue);
+      }
+    }
   }
 
   @Override

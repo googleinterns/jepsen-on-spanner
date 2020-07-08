@@ -77,11 +77,11 @@ public class BankVerifier implements Verifier {
       }
     } catch (VerifierException e) {
       System.out.println("Current possible state maps is: " + concurrentTxnStates.toString());
-      System.out.println("Invalid operation found at " + e.getMessage());
+      System.out.println(INVALID_INFO + e.getMessage());
       return false;
     }
 
-    System.out.println("Valid!");
+    System.out.println(VALID_INFO);
     return true;
   }
 
@@ -92,10 +92,11 @@ public class BankVerifier implements Verifier {
   private String recordUniqueId(Map<Keyword, Object> record) {
     long processId = (long) record.get(PROCESS);
     Keyword opName = (Keyword) record.get(OP_NAME);
-    List<String> value = (List<String>) record.get(VALUE);
+    List<List<Object>> value = (List<List<Object>>) record.get(VALUE);
     if (opName.equals(READ)) {
       // convert the read representation to only include keys
-      value = value.stream().map(s -> s.split(" ")[0]).collect(Collectors.toList());
+      value =
+              value.stream().map(s -> Collections.singletonList(s.get(0))).collect(Collectors.toList());
     }
     return String.format("%d %s %s", processId, opName.getName(), value.toString());
   }
@@ -106,7 +107,7 @@ public class BankVerifier implements Verifier {
    */
   private void checkOk(Map<Keyword, Object> record) throws VerifierException {
     Keyword opName = (Keyword) record.get(OP_NAME);
-    List<String> value = (List<String>) record.get(VALUE);
+    List<List<Object>> value = (List<List<Object>>) record.get(VALUE);
     String currRecordId = recordUniqueId(record);
     if (opName.equals(READ)) {
       checkOkRead(value, recordUniqueId(record));
@@ -125,19 +126,19 @@ public class BankVerifier implements Verifier {
    *             account "0" = 20, account "1" = 15
    * @param recordId a String that uniquely identifies the current operation
    */
-  private void checkOkRead(List<String> value, String recordId) throws VerifierException {
+  private void checkOkRead(List<List<Object>> value, String recordId) throws VerifierException {
     List<HashMap<String, Long>> possibleStates = concurrentTxnStates.get(recordId);
     if (possibleStates == null) {
       throw new VerifierException(READ.getName(), value);
     }
     Map<String, Long> currentState = new HashMap<>();
-    for (String representation : value) {
-      String[] keyValues = representation.split(" ");
-      long balance = Long.parseLong(keyValues[1]);
+    for (List<Object> representation : value) {
+      String key = (String) representation.get(0);
+      long balance = (long) representation.get(1);
       if (balance < 0) {
         throw new VerifierException(READ.getName(), value);
       }
-      currentState.put(keyValues[0], balance);
+      currentState.put(key, balance);
     }
 
     // The previous record must be a "invoke read", thus there should only be one possible state.
@@ -153,11 +154,11 @@ public class BankVerifier implements Verifier {
    *              account "0" to account "1"
    * @param recordId a String that uniquely identifies the current operation
    */
-  private void checkOkTransfer(List<String> value, String recordId) throws VerifierException {
-    String[] transferParams = value.get(0).split(" ");
-    String fromAcct = transferParams[0];
-    String toAcct = transferParams[1];
-    long amount = Long.parseLong(transferParams[2]);
+  private void checkOkTransfer(List<List<Object>> value, String recordId) throws VerifierException {
+    List<Object> transferParams = value.get(0);
+    String fromAcct = (String) transferParams.get(0);
+    String toAcct = (String) transferParams.get(1);
+    long amount = (long) transferParams.get(2);
     LinkedList<HashMap<String, Long>> possibleStatesForThisRecord =
             concurrentTxnStates.get(recordId);
     if (possibleStatesForThisRecord.size() != 1) {
@@ -194,7 +195,7 @@ public class BankVerifier implements Verifier {
    */
   private void checkFail(Map<Keyword, Object> record) throws VerifierException {
     Keyword opName = (Keyword) record.get(OP_NAME);
-    List<String> value = (List<String>) record.get(VALUE);
+    List<List<Object>> value = (List<List<Object>>) record.get(VALUE);
     if (opName.equals(TRANSFER)) {
       checkFailTransfer(value, recordUniqueId(record));
     } else {
@@ -210,10 +211,10 @@ public class BankVerifier implements Verifier {
    *              account "0" to account "1"
    * @param recordId a String that uniquely identifies the current operation
    */
-  private void checkFailTransfer(List<String> value, String recordId) throws VerifierException {
-    String[] transferParams = value.get(0).split(" ");
-    String fromAcct = transferParams[0];
-    long amount = Long.parseLong(transferParams[2]);
+  private void checkFailTransfer(List<List<Object>> value, String recordId) throws VerifierException {
+    List<Object> transferParams = value.get(0);
+    String fromAcct = (String) transferParams.get(0);
+    long amount = (long) transferParams.get(2);
     List<HashMap<String, Long>> possibleStates = concurrentTxnStates.get(recordId);
     if (possibleStates == null) {
       throw new VerifierException(TRANSFER.getName(), value);

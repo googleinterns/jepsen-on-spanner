@@ -1,6 +1,7 @@
 package com.google.jepsenonspanner.loadgenerator;
 
 import com.google.gson.Gson;
+import com.google.jepsenonspanner.operation.OpRepresentation;
 import com.google.jepsenonspanner.operation.Operation;
 import com.google.jepsenonspanner.operation.ReadTransaction;
 import com.google.jepsenonspanner.operation.ReadWriteTransaction;
@@ -36,7 +37,14 @@ public class LinearizabilityLoadGenerator extends LoadGenerator {
   private static final String ALLOW_MIXED_READ_WRITE = "allowMixedReadsWrites";
   private static final String OP_RATIO = "opRatio";
   private static final String ERR_MESSAGE = "Error parsing config file ";
-  private static final String TXN_LOAD_NAME = "txn";
+
+  // Added numbers in the front to break tie when transactions happen at the same time so that
+  // verifier correctly identifies a valid history; this is for the type column of the history
+  private static final String WRITE_ONLY_LOAD_NAME = "0txn";
+  private static final String READ_WRITE_LOAD_NAME = "1txn";
+  private static final String READ_ONLY_LOAD_NAME = "2txn";
+
+  // These strings are for the string representation column i.e. a read will look like :read :x nil
   private static final String READ_OP_NAME = ":read";
   private static final String WRITE_OP_NAME = ":write";
 
@@ -105,7 +113,6 @@ public class LinearizabilityLoadGenerator extends LoadGenerator {
       int opLimit = Integer.parseInt(config.get(OP_LIMIT));
       int valueLimit = Integer.parseInt(config.get(VALUE_LIMIT));
       boolean allowMultiKeys = Boolean.parseBoolean(config.get(ALLOW_MULTI_KEY));
-      boolean allowMixedReadsWrites = Boolean.parseBoolean(config.get(ALLOW_MIXED_READ_WRITE));
       String[] keys = config.get(KEYS).split(" ");
       String[] opRatioString = config.get(OP_RATIO).split(" ");
       int[] opRatios = Arrays.stream(opRatioString).mapToInt(Integer::parseInt).toArray();
@@ -153,9 +160,13 @@ public class LinearizabilityLoadGenerator extends LoadGenerator {
 
   private ReadTransaction readOnly() {
     List<String> selectedKeys = selectKeys();
-    List<String> representation = selectedKeys.stream().map(key -> String.format("%s %s nil",
-            READ_OP_NAME, key)).collect(Collectors.toList());
-    return ReadTransaction.createStrongRead(TXN_LOAD_NAME, selectedKeys, representation);
+    List<OpRepresentation> representation = new ArrayList<>();
+    for (String key : selectedKeys) {
+      OpRepresentation repr = OpRepresentation.createReadRepresentation(READ_OP_NAME,
+              convertKeyToEdnKeyword(key));
+      representation.add(repr);
+    }
+    return ReadTransaction.createStrongRead(READ_ONLY_LOAD_NAME, selectedKeys, representation);
   }
 
   private ReadWriteTransaction writeOnly() {
@@ -165,32 +176,43 @@ public class LinearizabilityLoadGenerator extends LoadGenerator {
             selectedKeys.stream().map(key -> TransactionalAction.createTransactionalWrite(key,
                     rand.nextInt(valueLimit) + 1)).collect(Collectors.toList());
     // Generate the string representations
-    List<String> representation = writes.stream().map(action -> String.format("%s %s %d",
-            WRITE_OP_NAME, action.getKey(), action.getValue())).collect(Collectors.toList());
-    return new ReadWriteTransaction(TXN_LOAD_NAME, representation, writes);
+    List<OpRepresentation> representation = new ArrayList<>();
+    for (TransactionalAction write : writes) {
+      OpRepresentation repr = OpRepresentation.createOtherRepresentation(WRITE_OP_NAME,
+              convertKeyToEdnKeyword(write.getKey()), String.valueOf(write.getValue()));
+      representation.add(repr);
+    }
+    return new ReadWriteTransaction(WRITE_ONLY_LOAD_NAME, representation, writes);
   }
 
   private ReadWriteTransaction transaction() {
     List<String> selectedKeys = selectKeys();
     List<TransactionalAction> txns = new ArrayList<>();
-    List<String> representation = new ArrayList<>();
+    List<OpRepresentation> representation = new ArrayList<>();
     for (String key : selectedKeys) {
       // A random boolean value to select between reads or writes
       boolean readWriteSelect = rand.nextBoolean();
       if (readWriteSelect) {
         txns.add(TransactionalAction.createTransactionalRead(key));
-        representation.add(String.format("%s %s nil", READ_OP_NAME, key));
+        representation.add(OpRepresentation.createReadRepresentation(READ_OP_NAME,
+                convertKeyToEdnKeyword(key)));
       } else {
         int valueToWrite = rand.nextInt(valueLimit) + 1;
         txns.add(TransactionalAction.createTransactionalWrite(key, valueToWrite));
-        representation.add(String.format("%s %s %d", WRITE_OP_NAME, key, valueToWrite));
+        representation.add(OpRepresentation.createOtherRepresentation(WRITE_OP_NAME,
+                convertKeyToEdnKeyword(key), String.valueOf(valueToWrite)));
       }
     }
-    return new ReadWriteTransaction(TXN_LOAD_NAME, representation, txns);
+    return new ReadWriteTransaction(READ_WRITE_LOAD_NAME, representation, txns);
   }
 
   // TODO: implement
   private ReadWriteTransaction cas() {
     throw new UnsupportedOperationException();
+  }
+
+  /** Convert this key to a representation that can be stored in history table */
+  private String convertKeyToEdnKeyword(String key) {
+    return ":" + key;
   }
 }

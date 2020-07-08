@@ -4,9 +4,11 @@ import com.beust.jcommander.Parameter;
 import com.beust.jcommander.ParameterException;
 import com.google.jepsenonspanner.client.Executor;
 import com.google.jepsenonspanner.loadgenerator.BankLoadGenerator;
+import com.google.jepsenonspanner.loadgenerator.LinearizabilityLoadGenerator;
 import com.google.jepsenonspanner.loadgenerator.LoadGenerator;
 import com.google.jepsenonspanner.operation.Operation;
 import com.google.jepsenonspanner.verifier.BankVerifier;
+import com.google.jepsenonspanner.verifier.KnossosVerifier;
 import com.google.jepsenonspanner.verifier.Verifier;
 
 import java.io.IOException;
@@ -15,6 +17,10 @@ import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.stream.Stream;
+
+import static com.google.jepsenonspanner.constants.BenchmarkTypes.BANK_TYPE;
+import static com.google.jepsenonspanner.constants.BenchmarkTypes.LINEARIZABILITY_TYPE;
+import static com.google.jepsenonspanner.constants.BenchmarkTypes.INVALID_TYPE_MSG;
 
 public class JepsenOnSpanner {
   private static final String PARSING_ERROR = "Error parsing history file";
@@ -47,6 +53,10 @@ public class JepsenOnSpanner {
   @Parameter(names = {"--config-file", "-cf"}, description = "Path to json file containing config" +
           " for load generator", validateWith = IsJson.class)
   private String configPath;
+
+  @Parameter(names = {"--benchmark-type", "-bt"}, description = "Type of benchmark to run",
+          validateWith = ValidateBenchmarkType.class)
+  private String benchmarkType;
 
   private static void validatePathEndsWith(String suffix, String name, String value) throws ParameterException {
     if (!value.endsWith(suffix)) {
@@ -81,11 +91,20 @@ public class JepsenOnSpanner {
     }
   }
 
+  public static class ValidateBenchmarkType implements IParameterValidator {
+    @Override
+    public void validate(String name, String value) throws ParameterException {
+      if (!value.equals(BANK_TYPE) && !value.equals(LINEARIZABILITY_TYPE)) {
+        throw new ParameterException(INVALID_TYPE_MSG + " " + value);
+      }
+    }
+  }
+
   /**
    * Checks if a config path is provided if this is a worker
    */
   private boolean invalidArgs() {
-    return component.equals(WORKER) && configPath == null;
+    return (component.equals(WORKER) && configPath == null) || (!component.equals(INIT) && benchmarkType == null);
   }
 
   public static void main(String[] args) {
@@ -132,7 +151,7 @@ public class JepsenOnSpanner {
    * Creates a generator and execute its loads.
    */
   private void runWorkload(Executor executor) {
-    LoadGenerator gen = BankLoadGenerator.createGeneratorFromConfig(configPath);
+    LoadGenerator gen = LoadGenerator.createGenerator(benchmarkType, configPath);
     while (gen.hasLoad()) {
       Operation op = gen.nextOperation();
       System.out.println("Generated op " + op.toString());
@@ -146,7 +165,7 @@ public class JepsenOnSpanner {
    */
   private void verifyHistory(Executor executor) {
     executor.extractHistory();
-    Verifier v = new BankVerifier();
+    Verifier v = Verifier.createVerifier(benchmarkType);
     if (initValuePath != null) {
       v.verify(HISTORY_PATH, retrieveInitialState(initValuePath));
     } else {

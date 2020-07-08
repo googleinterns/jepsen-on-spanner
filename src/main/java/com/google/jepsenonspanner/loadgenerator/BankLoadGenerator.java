@@ -1,6 +1,7 @@
 package com.google.jepsenonspanner.loadgenerator;
 
 import com.google.gson.Gson;
+import com.google.jepsenonspanner.operation.OpRepresentation;
 import com.google.jepsenonspanner.operation.Operation;
 import com.google.jepsenonspanner.operation.ReadTransaction;
 import com.google.jepsenonspanner.operation.ReadWriteTransaction;
@@ -9,13 +10,14 @@ import com.google.jepsenonspanner.operation.TransactionalAction;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
-import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Random;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 /**
  * Implements the bank benchmark load generator. Generates two kinds of load: a read across all
@@ -65,6 +67,8 @@ public class BankLoadGenerator extends LoadGenerator {
   private int acctNumber;
   private Config config;
   private long startTime;
+  private List<String> keys;
+  private List<OpRepresentation> readKeyRepresentation;
 
   private static final long MAX_MILLISECOND_PAST = 5 * 60 * 1000; // 5 minutes
 
@@ -97,6 +101,10 @@ public class BankLoadGenerator extends LoadGenerator {
     this.acctNumber = acctNumber;
     this.config = config;
     this.startTime = System.currentTimeMillis();
+    this.keys = IntStream.range(0, acctNumber).mapToObj(String::valueOf).collect(Collectors.toList());
+    this.readKeyRepresentation =
+            this.keys.stream().map(key -> OpRepresentation.createReadRepresentation(convertKeyToEdnString(key))).collect(
+            Collectors.toList());
     System.out.printf("Created bank generator with seed %d\n", seed);
   }
 
@@ -129,7 +137,7 @@ public class BankLoadGenerator extends LoadGenerator {
     =*/1, /*exactStaleRead=*/1, /*transfer=*/2), randSeed);
   }
 
-  public static BankLoadGenerator createGeneratorFromConfig(String configPath) {
+  public static LoadGenerator createGeneratorFromConfig(String configPath) {
     Gson gson = new Gson();
     try {
       HashMap<String, String> config = gson.fromJson(new FileReader(new File(configPath)),
@@ -167,26 +175,18 @@ public class BankLoadGenerator extends LoadGenerator {
     }
   }
 
-  private List<String> getReadKeys() {
-    List<String> keys = new ArrayList<>();
-    for (int i = 0; i < acctNumber; i++) {
-      keys.add(String.valueOf(i));
-    }
-    return keys;
-  }
-
   private ReadTransaction strongRead() {
-    return ReadTransaction.createStrongRead(READ_LOAD_NAME, getReadKeys());
+    return ReadTransaction.createStrongRead(READ_LOAD_NAME, keys, readKeyRepresentation);
   }
 
   private ReadTransaction boundedStaleRead() {
-    return ReadTransaction.createBoundedStaleRead(READ_LOAD_NAME, getReadKeys(),
+    return ReadTransaction.createBoundedStaleRead(READ_LOAD_NAME, keys, readKeyRepresentation,
             rand.nextInt((int) Math.min(MAX_MILLISECOND_PAST,
                     Math.max(System.currentTimeMillis() - startTime, 1))) + 1);
   }
 
   private ReadTransaction exactStaleRead() {
-    return ReadTransaction.createExactStaleRead(READ_LOAD_NAME, getReadKeys(),
+    return ReadTransaction.createExactStaleRead(READ_LOAD_NAME, keys, readKeyRepresentation,
             rand.nextInt((int) Math.min(MAX_MILLISECOND_PAST,
                     Math.max(System.currentTimeMillis() - startTime, 1))) + 1);
   }
@@ -214,7 +214,15 @@ public class BankLoadGenerator extends LoadGenerator {
                     balance -> true);
     transaction.get(1).setDependentAction(acct2Write);
 
-    return new ReadWriteTransaction(TRANSFER_LOAD_NAME, Collections.singletonList(String.format(
-            "%s %s %d", acct1, acct2, transferAmount)), transaction);
+    List<OpRepresentation> repr = Collections.singletonList(
+            OpRepresentation.createOtherRepresentation(convertKeyToEdnString(acct1)
+                    , convertKeyToEdnString(acct2), String.valueOf(transferAmount)));
+
+    return new ReadWriteTransaction(TRANSFER_LOAD_NAME, repr, transaction);
+  }
+
+  /** Convert this key to a representation that can be stored in history table */
+  private String convertKeyToEdnString(String key) {
+    return "\"" + key + "\"";
   }
 }

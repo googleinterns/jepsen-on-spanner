@@ -1,5 +1,6 @@
 package com.google.jepsenonspanner.client;
 
+import clojure.java.api.Clojure;
 import com.google.api.gax.longrunning.OperationFuture;
 import com.google.cloud.Timestamp;
 import com.google.cloud.spanner.Database;
@@ -23,10 +24,15 @@ import com.google.cloud.spanner.TransactionContext;
 import com.google.cloud.spanner.TransactionRunner;
 import com.google.cloud.spanner.Value;
 import com.google.common.annotations.VisibleForTesting;
+import com.google.jepsenonspanner.operation.OpRepresentation;
 import com.google.jepsenonspanner.operation.OperationException;
 import com.google.spanner.admin.database.v1.CreateDatabaseMetadata;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
 import us.bpsm.edn.Keyword;
+import us.bpsm.edn.parser.Parseable;
+import us.bpsm.edn.parser.Parser;
+import us.bpsm.edn.parser.Parsers;
 import us.bpsm.edn.printer.Printers;
 
 import javax.annotation.Nullable;
@@ -40,6 +46,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 /**
  * Executor class encapsulates the details of a maintaining a client and facilitating its
@@ -168,11 +175,7 @@ public class Executor {
       this.client = spanner.getDatabaseClient(DatabaseId.of(projectId, instanceId, databaseId));
     } catch (ExecutionException e) {
       SpannerException se = (SpannerException) e.getCause();
-      // If error code is ALREADY_EXISTS, other executors have created the initial tables already
-      if (se.getErrorCode() != ErrorCode.ALREADY_EXISTS) {
-        // otherwise throw error
-        throw se;
-      }
+      throw se;
     } catch (InterruptedException e) {
       e.printStackTrace();
       throw SpannerExceptionFactory.propagateInterrupt(e);
@@ -263,12 +266,16 @@ public class Executor {
     }
   }
 
+  public List<String> representationToStringList(List<OpRepresentation> representations) {
+    return representations.stream().map(OpRepresentation::toString).collect(Collectors.toList());
+  }
+
   /**
    * Records an "invoke" history [opName, representation, staleness] into the history table. If
    * the record is stale, return its stale read timestamp; otherwise returns the commit timestamp
    * of this record.
    */
-  public Timestamp recordInvoke(String opName, List<String> representation, int staleness) {
+  public Timestamp recordInvoke(String opName, List<OpRepresentation> representation, int staleness) {
     return writeRecord(opName, representation, RecordType.INVOKE, staleness);
   }
 
@@ -276,7 +283,7 @@ public class Executor {
    * Overloaded recordInvoke for non-stale operations / transactions.
    * Returns the commit timestamp of this record.
    */
-  public Timestamp recordInvoke(String opName, List<String> representation) {
+  public Timestamp recordInvoke(String opName, List<OpRepresentation> representation) {
     return recordInvoke(opName, representation, /*staleness=*/0);
   }
 
@@ -284,7 +291,7 @@ public class Executor {
    * Given a load name, a load value representation, a commit timestamp and an invoke timestamp,
    * record the "ok" history and update the timestamp of "invoke" history.
    */
-  public void recordComplete(String opName, List<String> recordRepresentation,
+  public void recordComplete(String opName, List<OpRepresentation> recordRepresentation,
                              Timestamp commitTimestamp, Timestamp invokeTimestamp) {
     try {
       client.readWriteTransaction().run(new TransactionRunner.TransactionCallable<Void>() {
@@ -293,7 +300,7 @@ public class Executor {
         public Void run(TransactionContext transaction) throws Exception {
           Struct row = transaction.readRow(HISTORY_TABLE_NAME, Key.of(invokeTimestamp, opName,
                   processID, RecordType.INVOKE.getCode()),
-                  Collections.singletonList(REAL_TIME_COLUMN_NAME));
+                  Arrays.asList(REAL_TIME_COLUMN_NAME, VALUE_COLUMN_NAME));
           Timestamp realTimestamp = null;
           if (!row.isNull(REAL_TIME_COLUMN_NAME)) {
             realTimestamp = row.getTimestamp(REAL_TIME_COLUMN_NAME);
@@ -305,7 +312,7 @@ public class Executor {
                           .set(REAL_TIME_COLUMN_NAME).to(Value.COMMIT_TIMESTAMP)
                           .set(RECORD_TYPE_COLUMN_NAME).to(RecordType.OK.getCode())
                           .set(OP_NAME_COLUMN_NAME).to(opName)
-                          .set(VALUE_COLUMN_NAME).toStringArray(recordRepresentation)
+                          .set(VALUE_COLUMN_NAME).toStringArray(representationToStringList(recordRepresentation))
                           .set(PID_COLUMN_NAME).to(processID).build(),
                   Mutation.delete(HISTORY_TABLE_NAME, Key.of(invokeTimestamp, opName, processID,
                           RecordType.INVOKE.getCode())),
@@ -328,19 +335,19 @@ public class Executor {
   /**
    * Records a fail history.
    */
-  public void recordFail(String opName, List<String> representation) {
+  public void recordFail(String opName, List<OpRepresentation> representation) {
     writeRecord(opName, representation, RecordType.FAIL, /*staleness=*/0);
   }
 
-  public void recordFail(String opName, List<String> representation,
-                              Timestamp staleTimestamp) {
+  public void recordFail(String opName, List<OpRepresentation> representation,
+                         Timestamp staleTimestamp) {
     writeRecord(opName, representation, RecordType.FAIL, /*staleness=*/0, staleTimestamp);
   }
 
   /**
    * Records an info history.
    */
-  public void recordInfo(String opName, List<String> representation) {
+  public void recordInfo(String opName, List<OpRepresentation> representation) {
     writeRecord(opName, representation, RecordType.INFO, /*staleness=*/0);
   }
 
@@ -350,8 +357,8 @@ public class Executor {
    * history table with the given recordType (can be one of "invoke", "ok", "fail" or "info").
    * Optional staleness will subtract staleness amount of milliseconds from the commit timestamp.
    */
-  private Timestamp writeRecord(String opName, List<String> representation, RecordType recordType,
-                                int staleness, Timestamp timestamp) throws RuntimeException {
+  private Timestamp writeRecord(String opName, List<OpRepresentation> representation,
+                                RecordType recordType, int staleness, Timestamp timestamp) throws RuntimeException {
     try {
       Timestamp commitTimestamp =
              client.write(Collections.singletonList(Mutation.newInsertBuilder(HISTORY_TABLE_NAME)
@@ -359,7 +366,7 @@ public class Executor {
                 .set(REAL_TIME_COLUMN_NAME).to(Value.COMMIT_TIMESTAMP)
                 .set(RECORD_TYPE_COLUMN_NAME).to(recordType.getCode())
                 .set(OP_NAME_COLUMN_NAME).to(opName)
-                .set(VALUE_COLUMN_NAME).toStringArray(representation)
+                .set(VALUE_COLUMN_NAME).toStringArray(representationToStringList(representation))
                 .set(PID_COLUMN_NAME).to(processID).build()));
        // TODO: Consider improving the logic here so we do not need the delete
       if (staleness != 0) {
@@ -372,7 +379,7 @@ public class Executor {
                         .set(TIME_COLUMN_NAME).to(staleTimestamp)
                         .set(RECORD_TYPE_COLUMN_NAME).to(recordType.getCode())
                         .set(OP_NAME_COLUMN_NAME).to(opName)
-                        .set(VALUE_COLUMN_NAME).toStringArray(representation)
+                        .set(VALUE_COLUMN_NAME).toStringArray(representationToStringList(representation))
                         .set(PID_COLUMN_NAME).to(processID).build(),
                 Mutation.delete(HISTORY_TABLE_NAME,
                         Key.of(commitTimestamp, opName, processID, recordType.getCode()))));
@@ -386,8 +393,8 @@ public class Executor {
     }
   }
 
-  private Timestamp writeRecord(String opName, List<String> representation, RecordType recordType,
-                                int staleness) throws RuntimeException {
+  private Timestamp writeRecord(String opName, List<OpRepresentation> representation,
+                                RecordType recordType, int staleness) throws RuntimeException {
     return writeRecord(opName, representation, recordType, staleness, Value.COMMIT_TIMESTAMP);
   }
 
@@ -423,8 +430,10 @@ public class Executor {
     record.put(Keyword.newKeyword("f"),
             Keyword.newKeyword(row.getString(OP_NAME_COLUMN_NAME).substring(1)));
     List<String> representation = row.getStringList(VALUE_COLUMN_NAME);
-    String repr = Printers.printString(Printers.defaultPrinterProtocol(), representation);
-    record.put(Keyword.newKeyword("value"), representation);
+    // Create OpRepresentations from the concatenated strings
+    List<OpRepresentation> value =
+            representation.stream().map(OpRepresentation::createOtherRepresentation).collect(Collectors.toList());
+    record.put(Keyword.newKeyword("value"), value);
     record.put(Keyword.newKeyword("process"), row.getLong(PID_COLUMN_NAME));
     return record;
   }
@@ -442,7 +451,7 @@ public class Executor {
         Map<Keyword, Object> record = convertToMap(resultSet.getCurrentRowAsStruct());
         records.add(record);
       }
-      recordWriter.write(Printers.printString(Printers.prettyPrinterProtocol(), records));
+      recordWriter.write(Printers.printString(OpRepresentation.getPrettyPrintProtocol(), records));
     } catch (IOException e) {
       throw new RuntimeException(RECORDER_ERROR);
     }
