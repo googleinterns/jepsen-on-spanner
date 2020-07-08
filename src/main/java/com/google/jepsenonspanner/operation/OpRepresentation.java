@@ -4,6 +4,8 @@ import us.bpsm.edn.parser.Parseable;
 import us.bpsm.edn.parser.Parser;
 import us.bpsm.edn.parser.Parsers;
 import us.bpsm.edn.printer.Printer;
+import us.bpsm.edn.printer.Printers;
+import us.bpsm.edn.protocols.Protocol;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -59,6 +61,11 @@ public class OpRepresentation {
             /*readValue=*/null);
   }
 
+  /**
+   * Create a representation from a String that is concatenated using DELIMITER. Note that this
+   * constructor does not recognize nil fields or reads, because it assumes that these reads no
+   * longer need to be updated.
+   */
   public static OpRepresentation createOtherRepresentation(String concatenatedString) {
     return createOtherRepresentation(concatenatedString.split(DELIMITER));
   }
@@ -106,10 +113,25 @@ public class OpRepresentation {
     return String.join(DELIMITER, wholeRepresentation);
   }
 
+  /**
+   * Returns the parsed representations as objects that can be printed to an EDN file
+   */
   public List<Object> getEdnPrintableObjects() {
     Parser p = Parsers.newParser(Parsers.defaultConfiguration());
     return representation.stream().map(repr -> p.nextValue(Parsers.newParseable(repr))).collect(Collectors.toList());
   }
 
-  public Printer.Fn<OpRepresentation> getEdnPrint
+  /**
+   * Returns the function that instructs the EDN printer to print this class
+   */
+  public static Printer.Fn<OpRepresentation> getPrintFunction() {
+    return (self, printer) -> printer.printValue(self.getEdnPrintableObjects());
+  }
+
+  /**
+   * Returns the printing protocol that includes the print function
+   */
+  public static Protocol<Printer.Fn<?>> getPrettyPrintProtocol() {
+    return Printers.prettyProtocolBuilder().put(OpRepresentation.class, getPrintFunction()).build();
+  }
 }
