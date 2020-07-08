@@ -51,19 +51,14 @@ public class BankVerifier implements Verifier {
       FileReader fs = new FileReader(new File(filePath));
       return verify(fs, state);
     } catch (FileNotFoundException e) {
-      throw new RuntimeException("Invalid file");
+      throw new RuntimeException(INVALID_FILE);
     }
   }
 
   @VisibleForTesting
   boolean verify(Readable input, Map<String, Long> initialState) {
     HashMap<String, Long> state = new HashMap<>(initialState);
-    Parseable pbr = Parsers.newParseable(input);
-    Parser parser = Parsers.newParser(Parsers.defaultConfiguration());
-
-    // parses the edn file to Java data structure
-    List<Map<Keyword, Object>> recordMaps = (List<Map<Keyword, Object>>) parser.nextValue(pbr);
-    List<Record> records = recordMaps.stream().map(Record::createRecordFromMap).collect(Collectors.toList());
+    List<Record> records = Verifier.parseRecords(input);
 
     try {
       for (Record record : records) {

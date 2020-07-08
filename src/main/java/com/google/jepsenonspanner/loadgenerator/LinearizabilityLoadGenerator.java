@@ -45,8 +45,8 @@ public class LinearizabilityLoadGenerator extends LoadGenerator {
   private static final String READ_ONLY_LOAD_NAME = "2txn";
 
   // These strings are for the string representation column i.e. a read will look like :read :x nil
-  private static final String READ_OP_NAME = ":read";
-  private static final String WRITE_OP_NAME = ":write";
+  public static final String READ_OP_NAME = ":read";
+  public static final String WRITE_OP_NAME = ":write";
 
   public static class Config extends LoadRatioConfig {
     public enum LoadType {

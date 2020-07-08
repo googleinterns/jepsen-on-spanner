@@ -39,6 +39,7 @@ public class Record implements Comparable<Record> {
   public static final Keyword LOAD_KEYWORD = Keyword.newKeyword("f");
   public static final Keyword REPR_KEYWORD = Keyword.newKeyword("value");
   public static final Keyword PID_KEYWORD = Keyword.newKeyword("process");
+  public static final Keyword COMMIT_TIMESTAMP_KEYWORD = Keyword.newKeyword("commitTimestamp");
   public static final Keyword INVOKE_STR = Keyword.newKeyword("invoke");
   public static final Keyword OK_STR = Keyword.newKeyword("ok");
   public static final Keyword FAIL_STR = Keyword.newKeyword("fail");
@@ -98,7 +99,7 @@ public class Record implements Comparable<Record> {
   public static Record createRecordFromMap(Map<Keyword, Object> map) {
     return new Record((Keyword) map.get(TYPE_KEYWORD), (Keyword) map.get(LOAD_KEYWORD),
             (List<List<Object>>) map.get(REPR_KEYWORD), (long) map.get(PID_KEYWORD),
-            /*commitTimestamp=*/null, /*realTimestamp=*/null);
+            (Timestamp) map.get(COMMIT_TIMESTAMP_KEYWORD), /*realTimestamp=*/null);
   }
 
   private static Keyword recordCodeToString(int code) throws RuntimeException {
@@ -138,7 +139,8 @@ public class Record implements Comparable<Record> {
       TYPE_KEYWORD, type,
       LOAD_KEYWORD, load,
       REPR_KEYWORD, representation,
-      PID_KEYWORD, pID
+      PID_KEYWORD, pID,
+      COMMIT_TIMESTAMP_KEYWORD, commitTimestamp
     );
   }
 
@@ -171,4 +173,6 @@ public class Record implements Comparable<Record> {
   public long getpID() {
     return pID;
   }
+
+  public Timestamp getCommitTimestamp() { return commitTimestamp; }
 }
