@@ -1,5 +1,11 @@
 package com.google.jepsenonspanner.operation;
 
+import us.bpsm.edn.parser.Parseable;
+import us.bpsm.edn.parser.Parser;
+import us.bpsm.edn.parser.Parsers;
+import us.bpsm.edn.printer.Printer;
+
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -53,6 +59,10 @@ public class OpRepresentation {
             /*readValue=*/null);
   }
 
+  public static OpRepresentation createOtherRepresentation(String concatenatedString) {
+    return createOtherRepresentation(concatenatedString.split(DELIMITER));
+  }
+
   public boolean isRead() {
     return isRead;
   }
@@ -95,4 +105,11 @@ public class OpRepresentation {
             readRepresentation.stream()).collect(Collectors.toList());
     return String.join(DELIMITER, wholeRepresentation);
   }
+
+  public List<Object> getEdnPrintableObjects() {
+    Parser p = Parsers.newParser(Parsers.defaultConfiguration());
+    return representation.stream().map(repr -> p.nextValue(Parsers.newParseable(repr))).collect(Collectors.toList());
+  }
+
+  public Printer.Fn<OpRepresentation> getEdnPrint
 }

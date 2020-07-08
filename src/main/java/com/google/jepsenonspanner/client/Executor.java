@@ -24,6 +24,7 @@ import com.google.cloud.spanner.TransactionContext;
 import com.google.cloud.spanner.TransactionRunner;
 import com.google.cloud.spanner.Value;
 import com.google.common.annotations.VisibleForTesting;
+import com.google.jepsenonspanner.operation.OpRepresentation;
 import com.google.jepsenonspanner.operation.OperationException;
 import com.google.spanner.admin.database.v1.CreateDatabaseMetadata;
 import org.apache.commons.lang3.StringUtils;
@@ -282,11 +283,6 @@ public class Executor {
     return recordInvoke(opName, representation, /*staleness=*/0);
   }
 
-  private List<String> combineRepresentation(List<List<String>> representation) {
-    return representation.stream().map(strings -> String.join(" ", strings))
-            .collect(Collectors.toList());
-  }
-
   /**
    * Given a load name, a load value representation, a commit timestamp and an invoke timestamp,
    * record the "ok" history and update the timestamp of "invoke" history.
@@ -430,18 +426,8 @@ public class Executor {
     record.put(Keyword.newKeyword("f"),
             Keyword.newKeyword(row.getString(OP_NAME_COLUMN_NAME).substring(1)));
     List<String> representation = row.getStringList(VALUE_COLUMN_NAME);
-    List<List<Object>> value = new ArrayList<>();
-    Parser p = Parsers.newParser(Parsers.defaultConfiguration());
-    for (String repr : representation) {
-      String[] reprSplit = repr.split(" ");
-      List<Object> currentRepr = new ArrayList<>();
-      for (String split : reprSplit) {
-        // Parse user defined representations as EDN compatible data structures
-        Parseable pbr = Parsers.newParseable(split);
-        currentRepr.add(p.nextValue(pbr));
-      }
-      value.add(currentRepr);
-    }
+    List<OpRepresentation> value =
+            representation.stream().map(OpRepresentation::createOtherRepresentation).collect(Collectors.toList());
     record.put(Keyword.newKeyword("value"), value);
     record.put(Keyword.newKeyword("process"), row.getLong(PID_COLUMN_NAME));
     return record;
