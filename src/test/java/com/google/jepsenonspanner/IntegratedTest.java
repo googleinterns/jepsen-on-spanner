@@ -23,18 +23,19 @@ public class IntegratedTest {
 
   @BeforeEach
   void setUpExecutor() {
-    executor = new Executor("jepsen-on-spanner-with-gke", "jepsen", "example-db", 0, /*init=*/true);
+    executor = new Executor("jepsen-on-spanner-with-gke", "test-instance", "example-db", 0, /*init
+    =*/true);
     executor.createTables();
   }
 
   @Test
   void testBankBenchmark() {
-    HashMap<String, Long> initialValues = new HashMap(Map.of("0", 10, "1", 0));
+    HashMap<String, Long> initialValues = new HashMap(Map.of("0", 10L, "1", 0L));
     executor.initKeyValues(initialValues);
     LoadGenerator gen = new BankLoadGenerator(50, 100, 5, 1);
     while (gen.hasLoad()) {
       Operation op = gen.nextOperation();
-      System.out.printf("Generated op %s", op.toString());
+      System.out.printf("Generated op %s\n", op.toString());
       op.getExecutionPlan().accept(executor);
     }
     executor.extractHistory();
@@ -44,7 +45,7 @@ public class IntegratedTest {
 
   @Test
   void testLinearizabilityBenchmark() {
-    HashMap<String, Long> initialValues = new HashMap(Map.of("x", 0, "y", 0));
+    HashMap<String, Long> initialValues = new HashMap(Map.of("x", 0L, "y", 0L));
     executor.initKeyValues(initialValues);
     LoadGenerator gen = LinearizabilityLoadGenerator.createGeneratorFromConfig("test-config.json");
     while (gen.hasLoad()) {

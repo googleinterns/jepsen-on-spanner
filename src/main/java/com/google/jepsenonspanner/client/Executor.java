@@ -427,7 +427,7 @@ public class Executor {
   /**
    * Extracts all history records and save it on a local edn file.
    */
-  public void extractHistoryOrderedByRealTime() {
+  public void extractHistoryWithTimestamp() {
     try (ResultSet resultSet = client.singleUse().read(HISTORY_TABLE_NAME, KeySet.all(),
             Arrays.asList(RECORD_TYPE_COLUMN_NAME, OP_NAME_COLUMN_NAME, VALUE_COLUMN_NAME,
                     PID_COLUMN_NAME, TIME_COLUMN_NAME, REAL_TIME_COLUMN_NAME));
@@ -437,8 +437,7 @@ public class Executor {
         Record record = Record.createRecordWithTimestamp(resultSet.getCurrentRowAsStruct());
         records.add(record);
       }
-      Collections.sort(records);
-      recordWriter.write(Printers.printString(Record.getPrettyPrintProtocol(), records));
+      recordWriter.write(Printers.printString(Record.getPrettyPrintProtocolWithTimestamp(), records));
     } catch (IOException e) {
       throw new RuntimeException(RECORDER_ERROR);
     }

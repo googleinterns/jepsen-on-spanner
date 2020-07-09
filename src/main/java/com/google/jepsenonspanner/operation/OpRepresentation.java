@@ -28,6 +28,10 @@ public class OpRepresentation {
   private static final String NIL_VALUE = "nil";
   private static final String DELIMITER = " ";
 
+  /**
+   * Base constructor that takes in a list of EDN objects that have already been parsed. This
+   * should be used on the verifier side.
+   */
   private OpRepresentation(List<Object> representation, boolean needsUpdate, Object keyToUpdate,
                            Long valueToUpdate) {
     if ((keyToUpdate != null) && !(keyToUpdate instanceof String) && !(keyToUpdate instanceof Keyword)) {
@@ -40,47 +44,43 @@ public class OpRepresentation {
     this.valueToUpdate = valueToUpdate;
   }
 
-  private static OpRepresentation createRepresentationFromStrings(List<String> representationStrings,
-                                                                  boolean isRead, String readKey,
-                                                                  Long readValue) {
+  /**
+   * Constructor for OpRepresentations generated from Generator side, where all objects will be
+   * in the form of EDN formatted Strings. For example, an EDN Keyword will be passed in as ":x".
+   * Value to update will always be null here, since it will be updated later e.g. in a read result.
+   */
+  private static OpRepresentation createRepresentationFromStrings(
+          List<String> representationStrings,
+          boolean isRead, String readKey) {
     Parser parser = Parsers.newParser(Parsers.defaultConfiguration());
     List<Object> representation =
             representationStrings.stream().map(repr -> parser.nextValue(Parsers.newParseable(repr))).collect(
                     Collectors.toList());
-    Object key = parser.nextValue(Parsers.newParseable(readKey));
-    return new OpRepresentation(representation, isRead, key, readValue);
+    Object key = null;
+    if (readKey != null) {
+      key = parser.nextValue(Parsers.newParseable(readKey));
+    }
+    return new OpRepresentation(representation, isRead, key, /*valueToUpdate=*/null);
   }
 
   public static OpRepresentation createReadRepresentation(List<String> representation, String key) {
-    return createRepresentationFromStrings(representation, /*isRead=*/true, key, /*readValue=*/null);
+    return createRepresentationFromStrings(representation, /*needsUpdate=*/true, key);
   }
 
   public static OpRepresentation createReadRepresentation(String representation, String key) {
-    return createRepresentationFromStrings(Collections.singletonList(representation), /*isRead=*/true, key, /*readValue
-    =*/null);
-  }
-
-  public static OpRepresentation createReadFromObjs(List<Object> representation, Object key,
-                                                    Long value) {
-    return new OpRepresentation(representation, /*isRead=*/true, key, /*readValue=*/null);
+    return createRepresentationFromStrings(Collections.singletonList(representation), /*needsUpdate=*/true, key);
   }
 
   public static OpRepresentation createReadRepresentation(String key) {
-    return createRepresentationFromStrings(Collections.emptyList(), /*isRead=*/true, key, /*readValue=*/null);
-  }
-
-  public static OpRepresentation createOtherRepresentation(List<String> representation) {
-    return createRepresentationFromStrings(representation, /*isRead=*/false, /*readKey=*/null, /*readValue
-    =*/null);
+    return createRepresentationFromStrings(Collections.emptyList(), /*needsUpdate=*/true, key);
   }
 
   public static OpRepresentation createOtherRepresentation(String... representation) {
-    return createRepresentationFromStrings(Arrays.asList(representation), /*isRead=*/false, /*readKey=*/null,
-            /*readValue=*/null);
+    return createRepresentationFromStrings(Arrays.asList(representation), /*needsUpdate=*/false, /*keyToUpdate=*/null);
   }
 
   public static OpRepresentation createOtherFromObjs(List<Object> representation) {
-    return new OpRepresentation(representation, /*isRead=*/false, /*key=*/null, /*readValue=*/null);
+    return new OpRepresentation(representation, /*needsUpdate=*/false, /*keyToUpdate=*/null, /*readValue=*/null);
   }
 
   /**
