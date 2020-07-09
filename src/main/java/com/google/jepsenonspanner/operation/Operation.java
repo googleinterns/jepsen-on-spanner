@@ -2,11 +2,9 @@ package com.google.jepsenonspanner.operation;
 
 import com.google.jepsenonspanner.client.Executor;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
-import java.util.stream.Collectors;
 
 /**
  * An Operation encapsulates a unit of load that should be executed atomically by the
@@ -42,8 +40,8 @@ public abstract class Operation {
   /**
    * Returns the recordRepresentation in their string format.
    */
-  public List<String> getRecordRepresentation() {
-    return recordRepresentation.stream().map(OpRepresentation::toString).collect(Collectors.toList());
+  public List<OpRepresentation> getRecordRepresentation() {
+    return recordRepresentation;
   }
 
   /**
@@ -57,9 +55,9 @@ public abstract class Operation {
     }
     System.out.println(readResults);
     for (OpRepresentation repr : recordRepresentation) {
-      if (repr.isRead()) {
+      if (repr.needsUpdate()) {
         long readValue = readResults.get(repr.getPureKey());
-        repr.setReadValue(readValue);
+        repr.setValueToUpdate(readValue);
       }
     }
   }

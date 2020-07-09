@@ -24,6 +24,7 @@ import com.google.cloud.spanner.TransactionContext;
 import com.google.cloud.spanner.TransactionRunner;
 import com.google.cloud.spanner.Value;
 import com.google.common.annotations.VisibleForTesting;
+import com.google.jepsenonspanner.operation.OpRepresentation;
 import com.google.jepsenonspanner.operation.OperationException;
 import com.google.spanner.admin.database.v1.CreateDatabaseMetadata;
 import org.apache.commons.lang3.StringUtils;
@@ -250,12 +251,16 @@ public class Executor {
     }
   }
 
+  public List<String> representationToStringList(List<OpRepresentation> representations) {
+    return representations.stream().map(OpRepresentation::toString).collect(Collectors.toList());
+  }
+
   /**
    * Records an "invoke" history [opName, representation, staleness] into the history table. If
    * the record is stale, return its stale read timestamp; otherwise returns the commit timestamp
    * of this record.
    */
-  public Timestamp recordInvoke(String opName, List<String> representation, int staleness) {
+  public Timestamp recordInvoke(String opName, List<OpRepresentation> representation, int staleness) {
     return writeRecord(opName, representation, RecordType.INVOKE, staleness);
   }
 
@@ -263,20 +268,15 @@ public class Executor {
    * Overloaded recordInvoke for non-stale operations / transactions.
    * Returns the commit timestamp of this record.
    */
-  public Timestamp recordInvoke(String opName, List<String> representation) {
+  public Timestamp recordInvoke(String opName, List<OpRepresentation> representation) {
     return recordInvoke(opName, representation, /*staleness=*/0);
-  }
-
-  private List<String> combineRepresentation(List<List<String>> representation) {
-    return representation.stream().map(strings -> String.join(" ", strings))
-            .collect(Collectors.toList());
   }
 
   /**
    * Given a load name, a load value representation, a commit timestamp and an invoke timestamp,
    * record the "ok" history and update the timestamp of "invoke" history.
    */
-  public void recordComplete(String opName, List<String> recordRepresentation,
+  public void recordComplete(String opName, List<OpRepresentation> recordRepresentation,
                              Timestamp commitTimestamp, Timestamp invokeTimestamp) {
     try {
       client.readWriteTransaction().run(new TransactionRunner.TransactionCallable<Void>() {
@@ -297,7 +297,7 @@ public class Executor {
                           .set(REAL_TIME_COLUMN_NAME).to(Value.COMMIT_TIMESTAMP)
                           .set(RECORD_TYPE_COLUMN_NAME).to(RecordType.OK.getCode())
                           .set(OP_NAME_COLUMN_NAME).to(opName)
-                          .set(VALUE_COLUMN_NAME).toStringArray(recordRepresentation)
+                          .set(VALUE_COLUMN_NAME).toStringArray(representationToStringList(recordRepresentation))
                           .set(PID_COLUMN_NAME).to(processID).build(),
                   Mutation.delete(HISTORY_TABLE_NAME, Key.of(invokeTimestamp, opName, processID,
                           RecordType.INVOKE.getCode())),
@@ -320,11 +320,11 @@ public class Executor {
   /**
    * Records a fail history.
    */
-  public void recordFail(String opName, List<String> representation) {
+  public void recordFail(String opName, List<OpRepresentation> representation) {
     writeRecord(opName, representation, RecordType.FAIL, /*staleness=*/0);
   }
 
-  public void recordFail(String opName, List<String> representation,
+  public void recordFail(String opName, List<OpRepresentation> representation,
                          Timestamp staleTimestamp) {
     writeRecord(opName, representation, RecordType.FAIL, /*staleness=*/0, staleTimestamp);
   }
@@ -332,7 +332,7 @@ public class Executor {
   /**
    * Records an info history.
    */
-  public void recordInfo(String opName, List<String> representation) {
+  public void recordInfo(String opName, List<OpRepresentation> representation) {
     writeRecord(opName, representation, RecordType.INFO, /*staleness=*/0);
   }
 
@@ -342,7 +342,7 @@ public class Executor {
    * history table with the given recordType (can be one of "invoke", "ok", "fail" or "info").
    * Optional staleness will subtract staleness amount of milliseconds from the commit timestamp.
    */
-  private Timestamp writeRecord(String opName, List<String> representation,
+  private Timestamp writeRecord(String opName, List<OpRepresentation> representation,
                                 RecordType recordType, int staleness, Timestamp timestamp) throws RuntimeException {
     try {
       Timestamp commitTimestamp =
@@ -351,7 +351,7 @@ public class Executor {
                 .set(REAL_TIME_COLUMN_NAME).to(Value.COMMIT_TIMESTAMP)
                 .set(RECORD_TYPE_COLUMN_NAME).to(recordType.getCode())
                 .set(OP_NAME_COLUMN_NAME).to(opName)
-                .set(VALUE_COLUMN_NAME).toStringArray(representation)
+                .set(VALUE_COLUMN_NAME).toStringArray(representationToStringList(representation))
                 .set(PID_COLUMN_NAME).to(processID).build()));
        // TODO: Consider improving the logic here so we do not need the delete
       if (staleness != 0) {
@@ -364,7 +364,7 @@ public class Executor {
                         .set(TIME_COLUMN_NAME).to(staleTimestamp)
                         .set(RECORD_TYPE_COLUMN_NAME).to(recordType.getCode())
                         .set(OP_NAME_COLUMN_NAME).to(opName)
-                        .set(VALUE_COLUMN_NAME).toStringArray(representation)
+                        .set(VALUE_COLUMN_NAME).toStringArray(representationToStringList(representation))
                         .set(PID_COLUMN_NAME).to(processID).build(),
                 Mutation.delete(HISTORY_TABLE_NAME,
                         Key.of(commitTimestamp, opName, processID, recordType.getCode()))));
@@ -378,7 +378,7 @@ public class Executor {
     }
   }
 
-  private Timestamp writeRecord(String opName, List<String> representation,
+  private Timestamp writeRecord(String opName, List<OpRepresentation> representation,
                                 RecordType recordType, int staleness) throws RuntimeException {
     return writeRecord(opName, representation, recordType, staleness, Value.COMMIT_TIMESTAMP);
   }
