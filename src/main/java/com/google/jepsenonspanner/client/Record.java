@@ -23,6 +23,7 @@ import static com.google.jepsenonspanner.client.Executor.REAL_TIME_COLUMN_NAME;
 import static com.google.jepsenonspanner.client.Executor.RECORD_TYPE_COLUMN_NAME;
 import static com.google.jepsenonspanner.client.Executor.TIME_COLUMN_NAME;
 import static com.google.jepsenonspanner.client.Executor.VALUE_COLUMN_NAME;
+import static java.util.Map.entry;
 
 /**
  * This class encapsulates a record that will be written to the EDN file. Other than recording
@@ -42,6 +43,7 @@ public class Record implements Comparable<Record> {
   public static final Keyword REPR_KEYWORD = Keyword.newKeyword("value");
   public static final Keyword PID_KEYWORD = Keyword.newKeyword("process");
   public static final Keyword COMMIT_TIMESTAMP_KEYWORD = Keyword.newKeyword("commitTimestamp");
+  public static final Keyword REAL_TIMESTAMP_KEYWORD = Keyword.newKeyword("realTimestamp");
   public static final Keyword INVOKE_STR = Keyword.newKeyword("invoke");
   public static final Keyword OK_STR = Keyword.newKeyword("ok");
   public static final Keyword FAIL_STR = Keyword.newKeyword("fail");
@@ -65,12 +67,10 @@ public class Record implements Comparable<Record> {
     Keyword type = recordCodeToString((int) row.getLong(RECORD_TYPE_COLUMN_NAME));
     String load = row.getString(OP_NAME_COLUMN_NAME).substring(1);
     long pID = row.getLong(PID_COLUMN_NAME);
-    List<String> representation = row.getStringList(VALUE_COLUMN_NAME);
-    // Create OpRepresentations from the concatenated strings
-    List<OpRepresentation> value =
-            representation.stream().map(OpRepresentation::createOtherRepresentation).collect(
-                    Collectors.toList());
-    return new Record(type, Keyword.newKeyword(load), value, pID, /*commitTimestamp
+    List<String> value = row.getStringList(VALUE_COLUMN_NAME);
+    List<OpRepresentation> representation =
+            value.stream().map(OpRepresentation::createOtherRepresentation).collect(Collectors.toList());
+    return new Record(type, Keyword.newKeyword(load), representation, pID, /*commitTimestamp
     =*/null, /*realTimestamp=*/null);
   }
 
@@ -90,12 +90,30 @@ public class Record implements Comparable<Record> {
     return record;
   }
 
+  /**
+   * Creates a record from a map read from a history file. The representations here will not
+   * recognize fields in the records that need update like nil; they are handled by the
+   * individual verifier.
+   */
   public static Record createRecordFromMap(Map<Keyword, Object> map) {
+    List<List<Object>> representationObjs = (List<List<Object>>) map.get(REPR_KEYWORD);
+    List<OpRepresentation> representations =
+            representationObjs.stream().map(OpRepresentation::createOtherFromObjs).collect(
+                    Collectors.toList());
+    String commitTimestampString = (String) map.get(COMMIT_TIMESTAMP_KEYWORD);
+    String realTimestampString = (String) map.get(REAL_TIMESTAMP_KEYWORD);
     return new Record((Keyword) map.get(TYPE_KEYWORD), (Keyword) map.get(LOAD_KEYWORD),
-            (List<OpRepresentation>) map.get(REPR_KEYWORD), (long) map.get(PID_KEYWORD),
-            (Timestamp) map.get(COMMIT_TIMESTAMP_KEYWORD), /*realTimestamp=*/null);
+            representations, (long) map.get(PID_KEYWORD),
+            parseTimestamp(commitTimestampString), parseTimestamp(realTimestampString));
   }
 
+  static Timestamp parseTimestamp(String timestampString) {
+    return timestampString == null ? null : Timestamp.parseTimestamp(timestampString);
+  }
+
+  /**
+   * Converts the code stored in spanner to meaning operation type. See Executor.
+   */
   private static Keyword recordCodeToString(int code) throws RuntimeException {
     switch (code) {
       case 0:
@@ -132,9 +150,8 @@ public class Record implements Comparable<Record> {
     return Map.of(
       TYPE_KEYWORD, type,
       LOAD_KEYWORD, load,
-      REPR_KEYWORD, representation,
-      PID_KEYWORD, pID,
-      COMMIT_TIMESTAMP_KEYWORD, commitTimestamp
+      REPR_KEYWORD, getRepresentation(),
+      PID_KEYWORD, pID
     );
   }
 
@@ -152,6 +169,37 @@ public class Record implements Comparable<Record> {
     return Printers.prettyProtocolBuilder().put(Record.class, getPrintFunction()).build();
   }
 
+  /**
+   * Converts this instance to a map to be printed to an EDN file, including timestamp.
+   */
+  private Map<Keyword, Object> getEdnRecordWithTimestamp() {
+    Map<Keyword, Object> record = new HashMap<>();
+    record.put(TYPE_KEYWORD, type);
+    record.put(LOAD_KEYWORD, load);
+    record.put(REPR_KEYWORD, getRepresentation());
+    record.put(PID_KEYWORD, pID);
+    record.put(COMMIT_TIMESTAMP_KEYWORD, commitTimestamp == null ? null :
+            commitTimestamp.toString());
+    record.put(REAL_TIMESTAMP_KEYWORD, realTimestamp == null ? null :
+            realTimestamp.toString());
+    return record;
+  }
+
+  /**
+   * Returns a function that tells EDN printer to customly print this class, including timestamp.
+   */
+  static Printer.Fn<Record> getPrintFunctionWithTimestamp() {
+    return (self, printer) -> printer.printValue(self.getEdnRecordWithTimestamp());
+  }
+
+  /**
+   * Returns a EDN printing protocol that includes the function to print this class, including
+   * timestamp.
+   */
+  static Protocol<Printer.Fn<?>> getPrettyPrintProtocolWithTimestamp() {
+    return Printers.prettyProtocolBuilder().put(Record.class, getPrintFunctionWithTimestamp()).build();
+  }
+
   public Keyword getType() {
     return type;
   }
@@ -160,8 +208,13 @@ public class Record implements Comparable<Record> {
     return load;
   }
 
+  /**
+   * Returns the actual list of objects under the hood. Since this class is used only in
+   * Verifiers, we do not return the OpRepresentation instances, but instead directly return
+   * data structures verifiers can deal with.
+   */
   public List<List<Object>> getRepresentation() {
-    return representation;
+    return representation.stream().map(OpRepresentation::getEdnPrintableObjects).collect(Collectors.toList());
   }
 
   public long getpID() {
