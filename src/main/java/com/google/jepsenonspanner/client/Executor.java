@@ -425,7 +425,7 @@ public class Executor {
   }
 
   /**
-   * Extracts all history records and save it on a local edn file.
+   * Extracts all history records, including timestamps, and save it on a local edn file.
    */
   public void extractHistoryWithTimestamp() {
     try (ResultSet resultSet = client.singleUse().read(HISTORY_TABLE_NAME, KeySet.all(),

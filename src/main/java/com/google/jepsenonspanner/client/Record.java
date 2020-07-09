@@ -23,6 +23,7 @@ import static com.google.jepsenonspanner.client.Executor.REAL_TIME_COLUMN_NAME;
 import static com.google.jepsenonspanner.client.Executor.RECORD_TYPE_COLUMN_NAME;
 import static com.google.jepsenonspanner.client.Executor.TIME_COLUMN_NAME;
 import static com.google.jepsenonspanner.client.Executor.VALUE_COLUMN_NAME;
+import static java.util.Map.entry;
 
 /**
  * This class encapsulates a record that will be written to the EDN file. Other than recording
@@ -99,9 +100,15 @@ public class Record implements Comparable<Record> {
     List<OpRepresentation> representations =
             representationObjs.stream().map(OpRepresentation::createOtherFromObjs).collect(
                     Collectors.toList());
+    String commitTimestampString = (String) map.get(COMMIT_TIMESTAMP_KEYWORD);
+    String realTimestampString = (String) map.get(REAL_TIMESTAMP_KEYWORD);
     return new Record((Keyword) map.get(TYPE_KEYWORD), (Keyword) map.get(LOAD_KEYWORD),
             representations, (long) map.get(PID_KEYWORD),
-            /*commitTimestamp=*/null, /*realTimestamp=*/null);
+            parseTimestamp(commitTimestampString), parseTimestamp(realTimestampString));
+  }
+
+  static Timestamp parseTimestamp(String timestampString) {
+    return timestampString == null ? null : Timestamp.parseTimestamp(timestampString);
   }
 
   /**
@@ -163,28 +170,31 @@ public class Record implements Comparable<Record> {
   }
 
   /**
-   * Converts this instance to a map to be printed to an EDN file.
+   * Converts this instance to a map to be printed to an EDN file, including timestamp.
    */
   private Map<Keyword, Object> getEdnRecordWithTimestamp() {
-    return Map.of(
-            TYPE_KEYWORD, type,
-            LOAD_KEYWORD, load,
-            REPR_KEYWORD, getRepresentation(),
-            PID_KEYWORD, pID,
-            COMMIT_TIMESTAMP_KEYWORD, commitTimestamp,
-            REAL_TIMESTAMP_KEYWORD, realTimestamp
-    );
+    Map<Keyword, Object> record = new HashMap<>();
+    record.put(TYPE_KEYWORD, type);
+    record.put(LOAD_KEYWORD, load);
+    record.put(REPR_KEYWORD, getRepresentation());
+    record.put(PID_KEYWORD, pID);
+    record.put(COMMIT_TIMESTAMP_KEYWORD, commitTimestamp == null ? null :
+            commitTimestamp.toString());
+    record.put(REAL_TIMESTAMP_KEYWORD, realTimestamp == null ? null :
+            realTimestamp.toString());
+    return record;
   }
 
   /**
-   * Returns a function that tells EDN printer to customly print this class.
+   * Returns a function that tells EDN printer to customly print this class, including timestamp.
    */
   static Printer.Fn<Record> getPrintFunctionWithTimestamp() {
     return (self, printer) -> printer.printValue(self.getEdnRecordWithTimestamp());
   }
 
   /**
-   * Returns a EDN printing protocol that includes the function to print this class.
+   * Returns a EDN printing protocol that includes the function to print this class, including
+   * timestamp.
    */
   static Protocol<Printer.Fn<?>> getPrettyPrintProtocolWithTimestamp() {
     return Printers.prettyProtocolBuilder().put(Record.class, getPrintFunctionWithTimestamp()).build();
