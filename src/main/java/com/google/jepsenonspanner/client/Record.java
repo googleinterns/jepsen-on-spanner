@@ -222,4 +222,6 @@ public class Record implements Comparable<Record> {
   }
 
   public Timestamp getCommitTimestamp() { return commitTimestamp; }
+
+  public Timestamp getRealTimestamp() { return realTimestamp; }
 }
