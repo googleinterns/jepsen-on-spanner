@@ -23,8 +23,8 @@ public class IntegratedTest {
 
   @BeforeEach
   void setUpExecutor() {
-    executor = new Executor("jepsen-on-spanner-with-gke", "test-instance", "example-db", 0, /*init
-    =*/true);
+    executor = new Executor("jepsen-on-spanner-with-gke", "test-instance", "example-db", 0,
+            /*init=*/true);
     executor.createTables();
   }
 

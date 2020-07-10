@@ -23,25 +23,19 @@ import java.util.stream.Collectors;
 public class OpRepresentation {
   private List<Object> representation;
   private boolean needsUpdate;
-  private Object keyToUpdate;
-  private Long valueToUpdate;
-  private static final String NIL_VALUE = "nil";
+  public static final String NIL_VALUE = "nil";
   private static final String DELIMITER = " ";
 
   /**
    * Base constructor that takes in a list of EDN objects that have already been parsed. This
-   * should be used on the verifier side.
+   * should be used by the createFromObjs function.
    */
-  private OpRepresentation(List<Object> representation, boolean needsUpdate, Object keyToUpdate,
-                           Long valueToUpdate) {
-    if ((keyToUpdate != null) && !(keyToUpdate instanceof String) && !(keyToUpdate instanceof Keyword)) {
-      // Only support string or keyword as key for now
-      throw new UnsupportedOperationException();
+  private OpRepresentation(List<Object> representation, boolean needsUpdate) {
+    if (needsUpdate && representation.get(representation.size() - 1) != null) {
+      throw new RuntimeException("Invalid representation needs update");
     }
     this.representation = representation;
     this.needsUpdate = needsUpdate;
-    this.keyToUpdate = keyToUpdate;
-    this.valueToUpdate = valueToUpdate;
   }
 
   /**
@@ -50,37 +44,36 @@ public class OpRepresentation {
    * Value to update will always be null here, since it will be updated later e.g. in a read result.
    */
   private static OpRepresentation createRepresentationFromStrings(
-          List<String> representationStrings,
-          boolean isRead, String readKey) {
+          List<String> representationStrings, boolean isRead) {
     Parser parser = Parsers.newParser(Parsers.defaultConfiguration());
     List<Object> representation =
             representationStrings.stream().map(repr -> parser.nextValue(Parsers.newParseable(repr))).collect(
                     Collectors.toList());
-    Object key = null;
-    if (readKey != null) {
-      key = parser.nextValue(Parsers.newParseable(readKey));
-    }
-    return new OpRepresentation(representation, isRead, key, /*valueToUpdate=*/null);
+    return new OpRepresentation(representation, isRead);
   }
 
-  public static OpRepresentation createReadRepresentation(List<String> representation, String key) {
-    return createRepresentationFromStrings(representation, /*needsUpdate=*/true, key);
+  public static OpRepresentation createReadRepresentation(List<String> representation) {
+    return createRepresentationFromStrings(representation, /*needsUpdate=*/true);
   }
 
-  public static OpRepresentation createReadRepresentation(String representation, String key) {
-    return createRepresentationFromStrings(Collections.singletonList(representation), /*needsUpdate=*/true, key);
+  public static OpRepresentation createReadRepresentation(String... representation) {
+    return createRepresentationFromStrings(Arrays.asList(representation), /*needsUpdate=*/true);
   }
 
-  public static OpRepresentation createReadRepresentation(String key) {
-    return createRepresentationFromStrings(Collections.emptyList(), /*needsUpdate=*/true, key);
+  public static OpRepresentation createOtherRepresentation(List<String> representation) {
+    return createRepresentationFromStrings(representation, /*needsUpdate=*/false);
   }
 
   public static OpRepresentation createOtherRepresentation(String... representation) {
-    return createRepresentationFromStrings(Arrays.asList(representation), /*needsUpdate=*/false, /*keyToUpdate=*/null);
+    return createRepresentationFromStrings(Arrays.asList(representation), /*needsUpdate=*/false);
   }
 
+  /**
+   * This function will be used on the verifier side, since they directly parsed strings from the
+   * edn file, and we do not need to go through the string conversion again.
+   */
   public static OpRepresentation createOtherFromObjs(List<Object> representation) {
-    return new OpRepresentation(representation, /*needsUpdate=*/false, /*keyToUpdate=*/null, /*readValue=*/null);
+    return new OpRepresentation(representation, /*needsUpdate=*/false);
   }
 
   /**
@@ -103,8 +96,9 @@ public class OpRepresentation {
    */
   public String getPureKey() {
     if (!needsUpdate()) {
-      throw new RuntimeException("Cannot get key for non-read representations");
+      throw new RuntimeException("Cannot get key for non-update representations");
     }
+    Object keyToUpdate = representation.get(representation.size() - 2);
     if (keyToUpdate instanceof String) {
       return (String) keyToUpdate;
     }
@@ -114,8 +108,11 @@ public class OpRepresentation {
     throw new UnsupportedOperationException();
   }
 
-  public void setValueToUpdate(Long valueToUpdate) {
-    this.valueToUpdate = valueToUpdate;
+  public void setValueToUpdate(long valueToUpdate) {
+    if (!needsUpdate()) {
+      throw new RuntimeException("Cannot update value for non-update representations");
+    }
+    representation.set(representation.size() - 1, valueToUpdate);
   }
 
   /**
@@ -128,11 +125,6 @@ public class OpRepresentation {
   public String toString() {
     List<String> representationStrings = representation.stream().map(Printers::printString).collect(
             Collectors.toList());
-    if (needsUpdate()) {
-      // A read, so we need to add the read values at the end
-      representationStrings.add(Printers.printString(keyToUpdate));
-      representationStrings.add(Printers.printString(valueToUpdate));
-    }
 
     return String.join(DELIMITER, representationStrings);
   }

@@ -102,9 +102,11 @@ public class BankLoadGenerator extends LoadGenerator {
     this.config = config;
     this.startTime = System.currentTimeMillis();
     this.keys = IntStream.range(0, acctNumber).mapToObj(String::valueOf).collect(Collectors.toList());
-    this.readKeyRepresentation =
-            this.keys.stream().map(key -> OpRepresentation.createReadRepresentation(convertKeyToEdnString(key))).collect(
-            Collectors.toList());
+    this.readKeyRepresentation = new ArrayList<>();
+    for (String key : this.keys) {
+      OpRepresentation repr = OpRepresentation.createReadRepresentation(convertKeyToEdnString(key), OpRepresentation.NIL_VALUE);
+      this.readKeyRepresentation.add(repr);
+    }
     System.out.printf("Created bank generator with seed %d\n", seed);
   }
 
