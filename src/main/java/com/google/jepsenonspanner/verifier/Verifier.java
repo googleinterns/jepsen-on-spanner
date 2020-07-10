@@ -14,17 +14,9 @@ import static com.google.jepsenonspanner.constants.BenchmarkTypes.INVALID_TYPE_M
  */
 public interface Verifier {
   // Pre-defined field names for the history file
-  static final Keyword PROCESS = Keyword.newKeyword("process");
-  static final Keyword VALUE = Keyword.newKeyword("value");
-  static final Keyword TYPE = Keyword.newKeyword("type");
-  static final Keyword OP_NAME = Keyword.newKeyword("f");
-  static final Keyword INVOKE = Keyword.newKeyword(Executor.INVOKE_STR);
-  static final Keyword OK = Keyword.newKeyword(Executor.OK_STR);
-  static final Keyword FAIL = Keyword.newKeyword(Executor.FAIL_STR);
-  static final Keyword INFO = Keyword.newKeyword(Executor.INFO_STR);
 
-  final String VALID_INFO = "Valid!";
-  final String INVALID_INFO = "Invalid operation found at ";
+  String VALID_INFO = "Valid!";
+  String INVALID_INFO = "Invalid operation found at ";
 
   /**
    * Given the path to a history file and a map of initial state of the database, checks if the

@@ -163,7 +163,7 @@ public class LinearizabilityLoadGenerator extends LoadGenerator {
     List<OpRepresentation> representation = new ArrayList<>();
     for (String key : selectedKeys) {
       OpRepresentation repr = OpRepresentation.createReadRepresentation(READ_OP_NAME,
-              convertKeyToEdnKeyword(key));
+              convertKeyToEdnKeyword(key), OpRepresentation.NIL_VALUE);
       representation.add(repr);
     }
     return ReadTransaction.createStrongRead(READ_ONLY_LOAD_NAME, selectedKeys, representation);
@@ -195,7 +195,7 @@ public class LinearizabilityLoadGenerator extends LoadGenerator {
       if (readWriteSelect) {
         txns.add(TransactionalAction.createTransactionalRead(key));
         representation.add(OpRepresentation.createReadRepresentation(READ_OP_NAME,
-                convertKeyToEdnKeyword(key)));
+                convertKeyToEdnKeyword(key), OpRepresentation.NIL_VALUE));
       } else {
         int valueToWrite = rand.nextInt(valueLimit) + 1;
         txns.add(TransactionalAction.createTransactionalWrite(key, valueToWrite));

@@ -1,6 +1,7 @@
 package com.google.jepsenonspanner.verifier;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.jepsenonspanner.client.Record;
 import com.google.jepsenonspanner.loadgenerator.BankLoadGenerator;
 import us.bpsm.edn.Keyword;
 import us.bpsm.edn.parser.Parseable;
@@ -18,6 +19,10 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+
+import static com.google.jepsenonspanner.client.Record.INVOKE_STR;
+import static com.google.jepsenonspanner.client.Record.OK_STR;
+import static com.google.jepsenonspanner.client.Record.FAIL_STR;
 
 /**
  * A BankVerifier is part of the Bank Benchmark and checks that the balances read are consistent
@@ -57,18 +62,19 @@ public class BankVerifier implements Verifier {
     Parser parser = Parsers.newParser(Parsers.defaultConfiguration());
 
     // parses the edn file to Java data structure
-    List<Map<Keyword, Object>> records = (List<Map<Keyword, Object>>) parser.nextValue(pbr);
+    List<Map<Keyword, Object>> recordMaps = (List<Map<Keyword, Object>>) parser.nextValue(pbr);
+    List<Record> records = recordMaps.stream().map(Record::createRecordFromMap).collect(Collectors.toList());
 
     try {
-      for (Map<Keyword, Object> record : records) {
+      for (Record record : records) {
         String currRecordId = recordUniqueId(record);
-        if (record.get(TYPE) == INVOKE) {
+        if (record.getType().equals(INVOKE_STR)) {
           // Add the initial possible state, which is a reference to the currently latest state.
           concurrentTxnStates.put(currRecordId, new LinkedList<>(Collections.singleton(state)));
         } else {
-          if (record.get(TYPE) == OK) {
+          if (record.getType().equals(OK_STR)) {
             checkOk(record);
-          } else if (record.get(TYPE) == FAIL) {
+          } else if (record.getType().equals(FAIL_STR)) {
             checkFail(record);
           }
           // This operation is considered complete, and the map should stop tracking its states
@@ -89,10 +95,10 @@ public class BankVerifier implements Verifier {
    * Convert a record to a uniquely identified string.
    * e.g. a transfer of 10 from account 0 to 1 by thread 1 is expressed as "1 transfer [0 1 10]"
    */
-  private String recordUniqueId(Map<Keyword, Object> record) {
-    long processId = (long) record.get(PROCESS);
-    Keyword opName = (Keyword) record.get(OP_NAME);
-    List<List<Object>> value = (List<List<Object>>) record.get(VALUE);
+  private String recordUniqueId(Record record) {
+    long processId = record.getpID();
+    Keyword opName = record.getLoad();
+    List<List<Object>> value = record.getRepresentation();
     if (opName.equals(READ)) {
       // convert the read representation to only include keys
       value =
@@ -105,9 +111,9 @@ public class BankVerifier implements Verifier {
    * Given an "ok" record and the current state of the database according to previous records,
    * determine if this record is valid. Throws a VerifierException if it is invalid.
    */
-  private void checkOk(Map<Keyword, Object> record) throws VerifierException {
-    Keyword opName = (Keyword) record.get(OP_NAME);
-    List<List<Object>> value = (List<List<Object>>) record.get(VALUE);
+  private void checkOk(Record record) throws VerifierException {
+    Keyword opName = record.getLoad();
+    List<List<Object>> value = record.getRepresentation();
     String currRecordId = recordUniqueId(record);
     if (opName.equals(READ)) {
       checkOkRead(value, recordUniqueId(record));
@@ -193,9 +199,9 @@ public class BankVerifier implements Verifier {
    * Given a "fail" record and the current state of the database according to previous records,
    * determine if this record is valid. Throws a VerifierException if it is invalid.
    */
-  private void checkFail(Map<Keyword, Object> record) throws VerifierException {
-    Keyword opName = (Keyword) record.get(OP_NAME);
-    List<List<Object>> value = (List<List<Object>>) record.get(VALUE);
+  private void checkFail(Record record) throws VerifierException {
+    Keyword opName = record.getLoad();
+    List<List<Object>> value = record.getRepresentation();
     if (opName.equals(TRANSFER)) {
       checkFailTransfer(value, recordUniqueId(record));
     } else {

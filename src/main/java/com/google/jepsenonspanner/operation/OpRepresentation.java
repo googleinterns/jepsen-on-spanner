@@ -1,18 +1,16 @@
 package com.google.jepsenonspanner.operation;
 
-import us.bpsm.edn.parser.Parseable;
+import us.bpsm.edn.Keyword;
 import us.bpsm.edn.parser.Parser;
 import us.bpsm.edn.parser.Parsers;
 import us.bpsm.edn.printer.Printer;
 import us.bpsm.edn.printer.Printers;
 import us.bpsm.edn.protocols.Protocol;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 /**
  * This class encapsulates the representation each operation would record in the history table.
@@ -23,42 +21,59 @@ import java.util.stream.Stream;
  * be null.
  */
 public class OpRepresentation {
-  private List<String> representation;
-  private boolean isRead;
-  private String readKey;
-  private Long readValue;
-  private static final String NIL_VALUE = "nil";
+  private List<Object> representation;
+  private boolean needsUpdate;
+  public static final String NIL_VALUE = "nil";
   private static final String DELIMITER = " ";
 
-  private OpRepresentation(List<String> representation, boolean isRead, String readKey,
-                           Long readValue) {
+  /**
+   * Base constructor that takes in a list of EDN objects that have already been parsed. This
+   * should be used by the createFromObjs function.
+   */
+  private OpRepresentation(List<Object> representation, boolean needsUpdate) {
+    if (needsUpdate && representation.get(representation.size() - 1) != null) {
+      throw new RuntimeException("Invalid representation needs update");
+    }
     this.representation = representation;
-    this.isRead = isRead;
-    this.readKey = readKey;
-    this.readValue = readValue;
+    this.needsUpdate = needsUpdate;
   }
 
-  public static OpRepresentation createReadRepresentation(List<String> representation, String key) {
-    return new OpRepresentation(representation, /*isRead=*/true, key, /*readValue=*/null);
+  /**
+   * Constructor for OpRepresentations generated from Generator side, where all objects will be
+   * in the form of EDN formatted Strings. For example, an EDN Keyword will be passed in as ":x".
+   * Value to update will always be null here, since it will be updated later e.g. in a read result.
+   */
+  private static OpRepresentation createRepresentationFromStrings(
+          List<String> representationStrings, boolean isRead) {
+    Parser parser = Parsers.newParser(Parsers.defaultConfiguration());
+    List<Object> representation =
+            representationStrings.stream().map(repr -> parser.nextValue(Parsers.newParseable(repr))).collect(
+                    Collectors.toList());
+    return new OpRepresentation(representation, isRead);
   }
 
-  public static OpRepresentation createReadRepresentation(String representation, String key) {
-    return new OpRepresentation(Collections.singletonList(representation), /*isRead=*/true, key, /*readValue
-    =*/null);
+  public static OpRepresentation createReadRepresentation(List<String> representation) {
+    return createRepresentationFromStrings(representation, /*needsUpdate=*/true);
   }
 
-  public static OpRepresentation createReadRepresentation(String key) {
-    return new OpRepresentation(Collections.emptyList(), /*isRead=*/true, key, /*readValue=*/null);
+  public static OpRepresentation createReadRepresentation(String... representation) {
+    return createRepresentationFromStrings(Arrays.asList(representation), /*needsUpdate=*/true);
   }
 
   public static OpRepresentation createOtherRepresentation(List<String> representation) {
-    return new OpRepresentation(representation, /*isRead=*/false, /*readKey=*/null, /*readValue
-    =*/null);
+    return createRepresentationFromStrings(representation, /*needsUpdate=*/false);
   }
 
   public static OpRepresentation createOtherRepresentation(String... representation) {
-    return new OpRepresentation(Arrays.asList(representation), /*isRead=*/false, /*readKey=*/null,
-            /*readValue=*/null);
+    return createRepresentationFromStrings(Arrays.asList(representation), /*needsUpdate=*/false);
+  }
+
+  /**
+   * This function will be used on the verifier side, since they directly parsed strings from the
+   * edn file, and we do not need to go through the string conversion again.
+   */
+  public static OpRepresentation createOtherFromObjs(List<Object> representation) {
+    return new OpRepresentation(representation, /*needsUpdate=*/false);
   }
 
   /**
@@ -70,12 +85,8 @@ public class OpRepresentation {
     return createOtherRepresentation(concatenatedString.split(DELIMITER));
   }
 
-  public boolean isRead() {
-    return isRead;
-  }
-
-  public String getReadKey() {
-    return readKey;
+  public boolean needsUpdate() {
+    return needsUpdate;
   }
 
   /**
@@ -84,11 +95,24 @@ public class OpRepresentation {
    * stored as x. Supports stripping of EDN Keyword or Strings.
    */
   public String getPureKey() {
-    return readKey.replaceAll("[\":]", "");
+    if (!needsUpdate()) {
+      throw new RuntimeException("Cannot get key for non-update representations");
+    }
+    Object keyToUpdate = representation.get(representation.size() - 2);
+    if (keyToUpdate instanceof String) {
+      return (String) keyToUpdate;
+    }
+    if (keyToUpdate instanceof Keyword) {
+      return ((Keyword) keyToUpdate).getName();
+    }
+    throw new UnsupportedOperationException();
   }
 
-  public void setReadValue(Long readValue) {
-    this.readValue = readValue;
+  public void setValueToUpdate(long valueToUpdate) {
+    if (!needsUpdate()) {
+      throw new RuntimeException("Cannot update value for non-update representations");
+    }
+    representation.set(representation.size() - 1, valueToUpdate);
   }
 
   /**
@@ -99,26 +123,17 @@ public class OpRepresentation {
    */
   @Override
   public String toString() {
-    // A non-read representation, so we do not need extra info
-    if (!isRead) {
-      return String.join(DELIMITER, representation);
-    }
+    List<String> representationStrings = representation.stream().map(Printers::printString).collect(
+            Collectors.toList());
 
-    // Need to add the read representation
-    List<String> readRepresentation = Arrays.asList(readKey, readValue == null ? NIL_VALUE :
-            String.valueOf(readValue));
-    // Concatenate two lists
-    List<String> wholeRepresentation = Stream.concat(representation.stream(),
-            readRepresentation.stream()).collect(Collectors.toList());
-    return String.join(DELIMITER, wholeRepresentation);
+    return String.join(DELIMITER, representationStrings);
   }
 
   /**
    * Returns the parsed representations as objects that can be printed to an EDN file
    */
   public List<Object> getEdnPrintableObjects() {
-    Parser p = Parsers.newParser(Parsers.defaultConfiguration());
-    return representation.stream().map(repr -> p.nextValue(Parsers.newParseable(repr))).collect(Collectors.toList());
+    return representation;
   }
 
   /**

@@ -41,6 +41,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -75,12 +76,11 @@ public class Executor {
   public static final String REAL_TIME_COLUMN_NAME = "RealTime";
   public static final String PID_COLUMN_NAME = "ProcessID";
   public static final String OP_NAME_COLUMN_NAME = "Load";
-  public static final String INVOKE_STR = "invoke";
-  public static final String OK_STR = "ok";
-  public static final String FAIL_STR = "fail";
-  public static final String INFO_STR = "info";
   public static final String RECORD_FILENAME = "history.edn";
+  public static final String RECORD_BY_REAL_TIME_FILENAME = "history-real-time.edn";
   public static final String RECORDER_ERROR = "RECORDER ERROR";
+  private static final Keyword TIMESTAMP_KEYWORD = Keyword.newKeyword("timestamp");
+  private static final Keyword REAL_TIME_KEYWORD = Keyword.newKeyword("realTime");
 
   /**
    * Functional interface that will be implemented by user of Executor.runTxn. This function will
@@ -111,21 +111,6 @@ public class Executor {
 
     public int getCode() {
       return code;
-    }
-  }
-
-  private String recordCodeToString(int code) throws RuntimeException {
-    switch (code) {
-      case 0:
-        return INVOKE_STR;
-      case 1:
-        return FAIL_STR;
-      case 2:
-        return INFO_STR;
-      case 3:
-        return OK_STR;
-      default:
-        throw new RuntimeException(RECORDER_ERROR);
     }
   }
 
@@ -421,24 +406,6 @@ public class Executor {
   }
 
   /**
-   * Converts a row of History table into a Map that will be written into the edn file.
-   */
-  private Map<Keyword, Object> convertToMap(Struct row) {
-    Map<Keyword, Object> record = new HashMap<>();
-    record.put(Keyword.newKeyword("type"),
-            Keyword.newKeyword(recordCodeToString((int) row.getLong(RECORD_TYPE_COLUMN_NAME))));
-    record.put(Keyword.newKeyword("f"),
-            Keyword.newKeyword(row.getString(OP_NAME_COLUMN_NAME).substring(1)));
-    List<String> representation = row.getStringList(VALUE_COLUMN_NAME);
-    // Create OpRepresentations from the concatenated strings
-    List<OpRepresentation> value =
-            representation.stream().map(OpRepresentation::createOtherRepresentation).collect(Collectors.toList());
-    record.put(Keyword.newKeyword("value"), value);
-    record.put(Keyword.newKeyword("process"), row.getLong(PID_COLUMN_NAME));
-    return record;
-  }
-
-  /**
    * Extracts all history records and save it on a local edn file.
    */
   public void extractHistory() {
@@ -446,12 +413,31 @@ public class Executor {
             Arrays.asList(RECORD_TYPE_COLUMN_NAME, OP_NAME_COLUMN_NAME, VALUE_COLUMN_NAME,
                     PID_COLUMN_NAME));
          FileWriter recordWriter = new FileWriter(RECORD_FILENAME)) {
-      List<Map<Keyword, Object>> records = new ArrayList<>();
+      List<Record> records = new ArrayList<>();
       while (resultSet.next()) {
-        Map<Keyword, Object> record = convertToMap(resultSet.getCurrentRowAsStruct());
+        Record record = Record.createRecordWithoutTimestamp(resultSet.getCurrentRowAsStruct());
         records.add(record);
       }
-      recordWriter.write(Printers.printString(OpRepresentation.getPrettyPrintProtocol(), records));
+      recordWriter.write(Printers.printString(Record.getPrettyPrintProtocol(), records));
+    } catch (IOException e) {
+      throw new RuntimeException(RECORDER_ERROR);
+    }
+  }
+
+  /**
+   * Extracts all history records, including timestamps, and save it on a local edn file.
+   */
+  public void extractHistoryWithTimestamp() {
+    try (ResultSet resultSet = client.singleUse().read(HISTORY_TABLE_NAME, KeySet.all(),
+            Arrays.asList(RECORD_TYPE_COLUMN_NAME, OP_NAME_COLUMN_NAME, VALUE_COLUMN_NAME,
+                    PID_COLUMN_NAME, TIME_COLUMN_NAME, REAL_TIME_COLUMN_NAME));
+         FileWriter recordWriter = new FileWriter(RECORD_BY_REAL_TIME_FILENAME)) {
+      List<Record> records = new ArrayList<>();
+      while (resultSet.next()) {
+        Record record = Record.createRecordWithTimestamp(resultSet.getCurrentRowAsStruct());
+        records.add(record);
+      }
+      recordWriter.write(Printers.printString(Record.getPrettyPrintProtocolWithTimestamp(), records));
     } catch (IOException e) {
       throw new RuntimeException(RECORDER_ERROR);
     }
