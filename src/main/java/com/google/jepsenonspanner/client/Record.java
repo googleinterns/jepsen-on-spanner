@@ -30,7 +30,7 @@ import static java.util.Map.entry;
  * all the fields in a record, it also provides support for sorting in timestamp order and a
  * printer protocol for the Java-EDN api.
  */
-public class Record implements Comparable<Record> {
+public class Record {
   private Keyword type;
   private Keyword load;
   private List<OpRepresentation> representation;
@@ -127,20 +127,6 @@ public class Record implements Comparable<Record> {
       default:
         throw new RuntimeException("Error parsing type code");
     }
-  }
-
-  @Override
-  public int compareTo(Record record) {
-    Timestamp myTimestamp = getTimestamp();
-    Timestamp otherTimestamp = record.getTimestamp();
-    return myTimestamp.compareTo(otherTimestamp);
-  }
-
-  private Timestamp getTimestamp() {
-    if (commitTimestamp == null) {
-      throw new RuntimeException("Record cannot be compared because it does not have timestamp");
-    }
-    return realTimestamp == null ? commitTimestamp : realTimestamp;
   }
 
   /**
