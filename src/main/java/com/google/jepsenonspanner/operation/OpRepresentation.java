@@ -28,7 +28,7 @@ public class OpRepresentation {
 
   /**
    * Base constructor that takes in a list of EDN objects that have already been parsed. This
-   * should be used on the verifier side.
+   * should be used by the createFromObjs function.
    */
   private OpRepresentation(List<Object> representation, boolean needsUpdate) {
     if (needsUpdate && representation.get(representation.size() - 1) != null) {
@@ -68,6 +68,10 @@ public class OpRepresentation {
     return createRepresentationFromStrings(Arrays.asList(representation), /*needsUpdate=*/false);
   }
 
+  /**
+   * This function will be used on the verifier side, since they directly parsed strings from the
+   * edn file, and we do not need to go through the string conversion again.
+   */
   public static OpRepresentation createOtherFromObjs(List<Object> representation) {
     return new OpRepresentation(representation, /*needsUpdate=*/false);
   }
