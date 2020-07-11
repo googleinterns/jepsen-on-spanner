@@ -45,7 +45,7 @@ public interface Verifier {
       case BANK_TYPE:
         return new BankVerifier();
       case LINEARIZABILITY_TYPE:
-        return new KnossosVerifier();
+        return new LinearizabilityVerifier();
       default:
         throw new RuntimeException(INVALID_TYPE_MSG);
     }

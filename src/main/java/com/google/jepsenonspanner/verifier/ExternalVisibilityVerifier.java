@@ -27,12 +27,41 @@ import static com.google.jepsenonspanner.client.Record.INFO_STR;
 import static com.google.jepsenonspanner.client.Record.INVOKE_STR;
 import static com.google.jepsenonspanner.client.Record.OK_STR;
 
+/**
+ * This verifier specifically test for the following case
+ * https://docs.google.com/document/d/1nnunw1-mXv_PIAw5cmL3Ok_fUb5cmDmsz0kjjQkQa_M/edit?ts=5ede7ea6#heading=h.wg7ps58g41g5
+ *
+ * Consider the follow scenario, where start state is [[:x 0] [:y 0]]:
+ * :write :x 1 |---|------------------------------------|
+ *             2   5                                    20
+ * :write :y 2       |--|-|
+ *                   6  8 10
+ * :read :y 2               |----|---|
+ *                          11   13  15
+ * :read :x 0  |                        |----|
+ *             1                        16   19
+ * This sequence will allow the user to deduce that the write to x happens after the write to y,
+ * but a stale read at 6 will produce [[:x 1] [:y 0]], which contradicts the deduction.
+ *
+ * In the following comments, we are going to refer to a read whose commit timestamp is less than
+ * its real start time as an "abnormal read".
+ */
 public class ExternalVisibilityVerifier implements Verifier {
   private static final Keyword READ_KEYWORD = Keyword.newKeyword("read");
   private static final Keyword WRITE_KEYWORD = Keyword.newKeyword("write");
 
+  // Keeps track of all non-abnormal reads, ranked by their commit timestamps
   private TreeMap<Timestamp, Record> finishedReads = new TreeMap<>();
+
+  // Keeps track of changes to the database state, ranked by their commit timestamps. Only stores
+  // delta instead of the whole state map
   private TreeMap<Timestamp, Map<String, Long>> stateChanges = new TreeMap<>();
+
+  // Keeps track of all abnormal reads whose invoke records have been seen yet whose ok record
+  // has not. The key is a hash of the record to identify two records that belong to the same
+  // operation. Maintain this data structure because we cannot tell if a read is abnormal from
+  // its ok record, and we also do not know about the read result from its invoke record. Thus we
+  // need a way to connect the two records.
   private Map<String, Record> hangingReadsToIgnore = new HashMap<>();
 
   @Override
@@ -52,6 +81,8 @@ public class ExternalVisibilityVerifier implements Verifier {
 
     for (Record record : records) {
       if (record.getType().equals(INFO_STR) || record.getType().equals(FAIL_STR)) {
+        // The linearizability benchmark should not generate any error; if there is any error,
+        // stop the load and inspect.
         System.out.println(INVALID_INFO + "\n\t" + record);
         return false;
       }
@@ -59,47 +90,55 @@ public class ExternalVisibilityVerifier implements Verifier {
         String currentRecordId = readOperationId(record);
         if (record.getType().equals(OK_STR)) {
           if (!hangingReadsToIgnore.containsKey(currentRecordId)) {
+            // A finished non-abnormal read, so add it to finishedReads
             finishedReads.put(record.getCommitTimestamp(), record);
           } else {
+            // A finished abnormal read, we need its real start time
             Timestamp startTimestamp = hangingReadsToIgnore.get(currentRecordId).getRealTimestamp();
             if (!checkAbnormalRead(record, startTimestamp, initialState)) {
               return false;
             }
+
+            // Remember to garbage collect
             hangingReadsToIgnore.remove(currentRecordId);
           }
         } else if (record.getType().equals(INVOKE_STR) &&
                 record.getCommitTimestamp().compareTo(record.getRealTimestamp()) < 0) {
+          // An abnormal read, but we cannot verify it yet, since we do not know its read result
           hangingReadsToIgnore.put(currentRecordId, record);
         }
       } else {
-        List<List<Object>> representations = record.getRawRepresentation();
-        Map<String, Long> stateChange = new HashMap<>();
-        for (List<Object> repr : representations) {
-          if (repr.get(0).equals(WRITE_KEYWORD)) {
-            String key = ((Keyword) repr.get(1)).getName();
-            long value = (long) repr.get(2);
-            stateChange.put(key, value);
-          }
+        if (record.getType().equals(OK_STR)) {
+          updateStateChanges(record);
         }
-        stateChanges.put(record.getCommitTimestamp(), stateChange);
       }
     }
     System.out.println(VALID_INFO);
     return true;
   }
 
+  /**
+   * Goes through all previously finished reads, then checks for each read R, if the state
+   * deduced by R and current abnormal read can be observed at any point between the commit
+   * timestamp of two reads i.e. if this state can be observed by any changes in between. If not,
+   * return false i.e. invalid.
+   * @param record the ok record that corresponds to the abnormal read
+   * @param currentStartTimestamp the start timestamp of the abnoraml read
+   * @param initialState initial state of the database
+   */
   private boolean checkAbnormalRead(Record record, Timestamp currentStartTimestamp, Map<String,
           Long> initialState) {
     Timestamp currentCommitTimestamp = record.getCommitTimestamp();
 
-    // Then filter out all the reads that happened between the current commit timestamp
-    // and the current real start time
     Set<String> keysInThisRead = getRecordKeys(record);
-    System.out.println(currentCommitTimestamp);
-    System.out.println(currentStartTimestamp);
+    // Find all the reads that happened between the current commit timestamp and the current real
+    // start time; these are the reads we want to check against the current abnoraml read
     Map<Timestamp, Record> subMapToInspect = finishedReads.subMap(currentCommitTimestamp,
             currentStartTimestamp);
     Collection<Record> readsToInspect = subMapToInspect.values();
+    // Find the set of keys that are involved in all the reads that we need to inspect, and
+    // extract a latest state that contains all these keys. This aims to save space so that we do
+    // not need to extract those keys that are not involved in any reads.
     Set<String> allKeys =
             readsToInspect.stream().collect(HashSet::new,
                     (set, singleRecord) -> set.addAll(getRecordKeys(singleRecord)),
@@ -107,6 +146,8 @@ public class ExternalVisibilityVerifier implements Verifier {
     allKeys.addAll(keysInThisRead);
     Map<String, Long> latestState = getLastChangedValues(allKeys, currentCommitTimestamp,
             initialState);
+    // This variable will be updated later so that each time we are moving the changes we are
+    // inspecting to the commit timestamp of the next read.
     Timestamp startInspectTimestamp = currentCommitTimestamp;
     for (Record read : readsToInspect) {
       if (read.getRealTimestamp().compareTo(currentStartTimestamp) > 0) {
@@ -114,6 +155,7 @@ public class ExternalVisibilityVerifier implements Verifier {
         continue;
       }
       boolean valid = false;
+      // Find all state changes between the commit timestamp of the last read and that of this read
       Map<Timestamp, Map<String, Long>> statesToInspect =
               stateChanges.subMap(startInspectTimestamp, /*inclusive=*/false,
                       read.getCommitTimestamp(), /*inclusive=*/true);
@@ -143,6 +185,26 @@ public class ExternalVisibilityVerifier implements Verifier {
     return true;
   }
 
+  /**
+   * Keep track of the changes that happened in this record
+   */
+  private void updateStateChanges(Record record) {
+    List<List<Object>> representations = record.getRawRepresentation();
+    Map<String, Long> stateChange = new HashMap<>();
+    for (List<Object> repr : representations) {
+      if (repr.get(0).equals(WRITE_KEYWORD)) {
+        String key = ((Keyword) repr.get(1)).getName();
+        long value = (long) repr.get(2);
+        stateChange.put(key, value);
+      }
+    }
+    stateChanges.put(record.getCommitTimestamp(), stateChange);
+  }
+
+  /**
+   * For the given keys, go backwards in history and find the latest values (up to upToTimestamp)
+   * corresponding to these keys. Used to construct a partial state at upToTimestamp.
+   */
   private Map<String, Long> getLastChangedValues(Collection<String> keys, Timestamp upToTimestamp,
                                                  Map<String, Long> initialState) {
     NavigableMap<Timestamp, Map<String, Long>> stateChangesToInspect =
@@ -152,23 +214,31 @@ public class ExternalVisibilityVerifier implements Verifier {
       for (Iterator<String> it = keys.iterator(); it.hasNext();) {
         String key = it.next();
         if (stateChange.containsKey(key)) {
+          // The key is found, so remove it
           latestState.put(key, stateChange.get(key));
           keys.remove(key);
         }
       }
     }
     for (String key : keys) {
+      // No changes have happened to these keys, so use the initial state values
       latestState.put(key, initialState.get(key));
     }
     return latestState;
   }
 
+  /**
+   * Given a record, record all keys involved in this record
+   */
   private Set<String> getRecordKeys(Record record) {
     return record.getOpRepresentation().stream()
                 .map(this::getKeyFromOpRepresentation)
                 .collect(Collectors.toSet());
   }
 
+  /**
+   * Given a readOnly ok record, returns the read result as a map
+   */
   private Map<String, Long> getReadResults(Record record) {
     Map<String, Long> result = new HashMap<>();
     for (OpRepresentation rawRepr : record.getOpRepresentation()) {
@@ -186,18 +256,17 @@ public class ExternalVisibilityVerifier implements Verifier {
 
   private long getValueFromOpRepresentation(OpRepresentation repr) {
     List<Object> rawObjects = repr.getEdnPrintableObjects();
-    System.out.println(rawObjects);
     return (long) rawObjects.get(rawObjects.size() - 1);
-  }
-
-  private boolean recordHasRead(Record record) {
-    return record.getRawRepresentation().stream().anyMatch(reprs -> reprs.get(0).equals(READ_KEYWORD));
   }
 
   private boolean recordIsReadOnly(Record record) {
     return record.getRawRepresentation().stream().allMatch(reprs -> reprs.get(0).equals(READ_KEYWORD));
   }
 
+  /**
+   * Returns the real timestamp if this record is readOnly, otherwise returns the commit timestamp.
+   * Used in sorting records.
+   */
   private Timestamp getTimestampAccordingToLoad(Record record) {
     if (recordIsReadOnly(record)) {
       return record.getRealTimestamp();
@@ -206,6 +275,9 @@ public class ExternalVisibilityVerifier implements Verifier {
     }
   }
 
+  /**
+   * Hash the read only record.
+   */
   private String readOperationId(Record record) {
     return String.format("%d %s", record.getpID(), getRecordKeys(record));
   }
