@@ -4,14 +4,10 @@ import com.google.cloud.Timestamp;
 import com.google.cloud.spanner.Struct;
 import com.google.jepsenonspanner.operation.OpRepresentation;
 import us.bpsm.edn.Keyword;
-import us.bpsm.edn.parser.Parseable;
-import us.bpsm.edn.parser.Parser;
-import us.bpsm.edn.parser.Parsers;
 import us.bpsm.edn.printer.Printer;
 import us.bpsm.edn.printer.Printers;
 import us.bpsm.edn.protocols.Protocol;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -23,7 +19,6 @@ import static com.google.jepsenonspanner.client.Executor.REAL_TIME_COLUMN_NAME;
 import static com.google.jepsenonspanner.client.Executor.RECORD_TYPE_COLUMN_NAME;
 import static com.google.jepsenonspanner.client.Executor.TIME_COLUMN_NAME;
 import static com.google.jepsenonspanner.client.Executor.VALUE_COLUMN_NAME;
-import static java.util.Map.entry;
 
 /**
  * This class encapsulates a record that will be written to the EDN file. Other than recording
@@ -136,7 +131,7 @@ public class Record {
     return Map.of(
       TYPE_KEYWORD, type,
       LOAD_KEYWORD, load,
-      REPR_KEYWORD, getRepresentation(),
+      REPR_KEYWORD, getRawRepresentation(),
       PID_KEYWORD, pID
     );
   }
@@ -162,7 +157,7 @@ public class Record {
     Map<Keyword, Object> record = new HashMap<>();
     record.put(TYPE_KEYWORD, type);
     record.put(LOAD_KEYWORD, load);
-    record.put(REPR_KEYWORD, getRepresentation());
+    record.put(REPR_KEYWORD, getRawRepresentation());
     record.put(PID_KEYWORD, pID);
     record.put(COMMIT_TIMESTAMP_KEYWORD, commitTimestamp == null ? null :
             commitTimestamp.toString());
@@ -199,8 +194,12 @@ public class Record {
    * Verifiers, we do not return the OpRepresentation instances, but instead directly return
    * data structures verifiers can deal with.
    */
-  public List<List<Object>> getRepresentation() {
+  public List<List<Object>> getRawRepresentation() {
     return representation.stream().map(OpRepresentation::getEdnPrintableObjects).collect(Collectors.toList());
+  }
+
+  public List<OpRepresentation> getOpRepresentation() {
+    return representation;
   }
 
   public long getpID() {
