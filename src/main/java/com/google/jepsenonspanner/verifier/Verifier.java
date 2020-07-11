@@ -29,7 +29,7 @@ public interface Verifier {
    * history file reflects a consistency error the benchmark is looking for. Returns false if
    * there is an error, and prints the location of the error to System.out.
    */
-  boolean verify(String filePath, Map<String, Long> initialState);
+  boolean verify(Map<String, Long> initialState, String... filePath);
 
   static List<Record> parseRecords(Readable input) {
     Parseable pbr = Parsers.newParseable(input);

@@ -41,9 +41,9 @@ public class BankVerifier implements Verifier {
   private HashMap<String, LinkedList<HashMap<String, Long>>> concurrentTxnStates = new HashMap<>();
 
   @Override
-  public boolean verify(String filePath, Map<String, Long> state) {
+  public boolean verify(Map<String, Long> state, String... filePath) {
     try {
-      FileReader fs = new FileReader(new File(filePath));
+      FileReader fs = new FileReader(new File(filePath[0]));
       return verify(fs, state);
     } catch (FileNotFoundException e) {
       throw new RuntimeException(INVALID_FILE);

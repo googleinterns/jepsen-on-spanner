@@ -95,15 +95,15 @@ public class Record {
     List<OpRepresentation> representations =
             representationObjs.stream().map(OpRepresentation::createOtherFromObjs).collect(
                     Collectors.toList());
-    String commitTimestampString = (String) map.get(COMMIT_TIMESTAMP_KEYWORD);
-    String realTimestampString = (String) map.get(REAL_TIMESTAMP_KEYWORD);
+    Long commitTimestampMilli = (Long) map.get(COMMIT_TIMESTAMP_KEYWORD);
+    Long realTimestampMilli = (Long) map.get(REAL_TIMESTAMP_KEYWORD);
     return new Record((Keyword) map.get(TYPE_KEYWORD), (Keyword) map.get(LOAD_KEYWORD),
             representations, (long) map.get(PID_KEYWORD),
-            parseTimestamp(commitTimestampString), parseTimestamp(realTimestampString));
+            parseTimestamp(commitTimestampMilli), parseTimestamp(realTimestampMilli));
   }
 
-  static Timestamp parseTimestamp(String timestampString) {
-    return timestampString == null ? null : Timestamp.parseTimestamp(timestampString);
+  static Timestamp parseTimestamp(Long milliseconds) {
+    return milliseconds == null ? null : Timestamp.of(new java.sql.Timestamp(milliseconds));
   }
 
   /**
@@ -160,9 +160,9 @@ public class Record {
     record.put(REPR_KEYWORD, getRawRepresentation());
     record.put(PID_KEYWORD, pID);
     record.put(COMMIT_TIMESTAMP_KEYWORD, commitTimestamp == null ? null :
-            commitTimestamp.toString());
+            commitTimestamp.toSqlTimestamp().getTime());
     record.put(REAL_TIMESTAMP_KEYWORD, realTimestamp == null ? null :
-            realTimestamp.toString());
+            realTimestamp.toSqlTimestamp().getTime());
     return record;
   }
 
@@ -209,4 +209,16 @@ public class Record {
   public Timestamp getCommitTimestamp() { return commitTimestamp; }
 
   public Timestamp getRealTimestamp() { return realTimestamp; }
+
+  @Override
+  public String toString() {
+    return "Record{" +
+            "type=" + type +
+            ", load=" + load +
+            ", representation=" + representation +
+            ", pID=" + pID +
+            ", commitTimestamp=" + commitTimestamp +
+            ", realTimestamp=" + realTimestamp +
+            '}';
+  }
 }
