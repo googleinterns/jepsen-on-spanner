@@ -152,4 +152,53 @@ class ExternalConsistencyVerifierTest {
                     "]";
     assertTrue(stringAsReadableHelper(input));
   }
+
+  @Test
+  void testValidAbnormalReads() {
+    String input =
+            "[" +
+                    "{:type :invoke, :f :txn, :value [[:write :y 2]], :process 2," +
+                    ":commitTimestamp 5, :realTimestamp 2}" +
+                    "{:type :ok, :f :txn, :value [[:write :y 2]], :process 2," +
+                    ":commitTimestamp 5, :realTimestamp 20}" +
+                    "{:type :invoke, :f :txn, :value [[:read :y nil]], :process 0," +
+                    ":commitTimestamp 1, :realTimestamp 11}" +
+                    "{:type :invoke, :f :txn, :value [[:write :y 5]], :process 2," +
+                    ":commitTimestamp 20, :realTimestamp 14}" +
+                    "{:type :ok, :f :txn, :value [[:write :y 5]], :process 2," +
+                    ":commitTimestamp 20, :realTimestamp 22}" +
+                    "{:type :ok, :f :txn, :value [[:read :y 0]], :process 0," +
+                    ":commitTimestamp 1, :realTimestamp 15}" +
+                    "{:type :invoke, :f :txn, :value [[:read :y nil]], :process 0," +
+                    ":commitTimestamp 22, :realTimestamp 21}" +
+                    "{:type :ok, :f :txn, :value [[:read :y 5]], :process 0," +
+                    ":commitTimestamp 22, :realTimestamp 25}" +
+                    "]";
+    assertTrue(stringAsReadableHelper(input));
+  }
+
+  @Test
+  void testValidAbnormalReadsWithMultipleKeys() {
+    initialState = Map.of("x", 0L, "y", 0L, "z", 0L, "w", 0L);
+    String input =
+            "[" +
+                    "{:type :invoke, :f :txn, :value [[:read :x nil] [:read :z nil]], :process 0," +
+                    ":commitTimestamp 8, :realTimestamp 4}" +
+                    "{:type :invoke, :f :txn, :value [[:write :y 2]], :process 2," +
+                    ":commitTimestamp 5, :realTimestamp 2}" +
+                    "{:type :ok, :f :txn, :value [[:write :y 2]], :process 2," +
+                    ":commitTimestamp 5, :realTimestamp 20}" +
+                    "{:type :invoke, :f :txn, :value [[:write :x 1]], :process 1," +
+                    ":commitTimestamp 6, :realTimestamp 3}" +
+                    "{:type :ok, :f :txn, :value [[:write :x 1]], :process 1," +
+                    ":commitTimestamp 6, :realTimestamp 8}" +
+                    "{:type :ok, :f :txn, :value [[:read :x 1] [:read :z 0]], :process 0," +
+                    ":commitTimestamp 8, :realTimestamp 10}" +
+                    "{:type :invoke, :f :txn, :value [[:read :y nil]], :process 0," +
+                    ":commitTimestamp 1, :realTimestamp 11}" +
+                    "{:type :ok, :f :txn, :value [[:read :y 0]], :process 0," +
+                    ":commitTimestamp 1, :realTimestamp 15}" +
+                    "]";
+    assertFalse(stringAsReadableHelper(input));
+  }
 }
