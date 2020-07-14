@@ -28,9 +28,15 @@ public interface Verifier {
    * Given the path to a history file and a map of initial state of the database, checks if the
    * history file reflects a consistency error the benchmark is looking for. Returns false if
    * there is an error, and prints the location of the error to System.out.
+   * @param initialState the initial mapping of key values in the database
+   * @param filePath a variadic number of files that points to different formats of history; some
+   *                verifier may read from multiple formats
    */
   boolean verify(Map<String, Long> initialState, String... filePath);
 
+  /**
+   * Parses the EDN format input to a list of Records.
+   */
   static List<Record> parseRecords(Readable input) {
     Parseable pbr = Parsers.newParseable(input);
     Parser parser = Parsers.newParser(Parsers.defaultConfiguration());

@@ -7,3 +7,5 @@ lib
 .gcloudignore
 *.json
 jobs
+WORKSPACE
+BUILD

@@ -8,7 +8,10 @@ import java.util.Map;
 public class LinearizabilityVerifier implements Verifier {
   @Override
   public boolean verify(Map<String, Long> initialState, String... filePath) {
-    return new KnossosVerifier().verify(initialState, filePath[0]) && new ExternalVisibilityVerifier().verify(
+    if (filePath.length != 2) {
+      throw new RuntimeException("Linearizability Verifier only accepts 2 files");
+    }
+    return new KnossosVerifier().verify(initialState, filePath[0]) && new ExternalConsistencyVerifier().verify(
             initialState, filePath[1]);
   }
 }

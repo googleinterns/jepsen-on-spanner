@@ -8,13 +8,13 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-class ExternalVisibilityVerifierTest {
-  private static ExternalVisibilityVerifier verifier;
+class ExternalConsistencyVerifierTest {
+  private static ExternalConsistencyVerifier verifier;
   private static Map<String, Long> initialState = Map.of("x", 0L, "y", 0L);
 
   @BeforeEach
   void setUp() {
-    verifier = new ExternalVisibilityVerifier();
+    verifier = new ExternalConsistencyVerifier();
   }
 
   boolean stringAsReadableHelper(String history) {
@@ -116,5 +116,40 @@ class ExternalVisibilityVerifierTest {
                     ":commitTimestamp 1, :realTimestamp 15}" +
                     "]";
     assertFalse(stringAsReadableHelper(input));
+  }
+
+  @Test
+  void testValidSimpleAbnormalReadHistory() {
+    String input =
+            "[" +
+                    "{:type :invoke, :f :txn, :value [[:write :y 2]], :process 2," +
+                    ":commitTimestamp 5, :realTimestamp 2}" +
+                    "{:type :ok, :f :txn, :value [[:write :y 2]], :process 2," +
+                    ":commitTimestamp 5, :realTimestamp 20}" +
+                    "{:type :invoke, :f :txn, :value [[:read :y nil]], :process 0," +
+                    ":commitTimestamp 1, :realTimestamp 11}" +
+                    "{:type :ok, :f :txn, :value [[:read :y 0]], :process 0," +
+                    ":commitTimestamp 1, :realTimestamp 15}" +
+                    "]";
+    assertTrue(stringAsReadableHelper(input));
+  }
+
+  @Test
+  void testValidAbnormalReadHistory() {
+    String input =
+            "[{:type :invoke, :f :txn, :value [[:read :x nil]], :process 0, " +
+                    ":commitTimestamp 8, :realTimestamp 4}" +
+                    "{:type :invoke, :f :txn, :value [[:write :y 2]], :process 2," +
+                    ":commitTimestamp 5, :realTimestamp 2}" +
+                    "{:type :ok, :f :txn, :value [[:write :y 2]], :process 2," +
+                    ":commitTimestamp 5, :realTimestamp 20}" +
+                    "{:type :ok, :f :txn, :value [[:read :x 0]], :process 0," +
+                    ":commitTimestamp 8, :realTimestamp 10}" +
+                    "{:type :invoke, :f :txn, :value [[:read :y nil]], :process 0," +
+                    ":commitTimestamp 1, :realTimestamp 11}" +
+                    "{:type :ok, :f :txn, :value [[:read :y 0]], :process 0," +
+                    ":commitTimestamp 1, :realTimestamp 15}" +
+                    "]";
+    assertTrue(stringAsReadableHelper(input));
   }
 }

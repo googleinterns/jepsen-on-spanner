@@ -29,24 +29,28 @@ import static com.google.jepsenonspanner.client.Record.OK_STR;
 
 /**
  * This verifier specifically test for the following case
- * https://docs.google.com/document/d/1nnunw1-mXv_PIAw5cmL3Ok_fUb5cmDmsz0kjjQkQa_M/edit?ts=5ede7ea6#heading=h.wg7ps58g41g5
  *
- * Consider the follow scenario, where start state is [[:x 0] [:y 0]]:
- * :write :x 1 |---|------------------------------------|
- *             2   5                                    20
- * :write :y 2       |--|-|
+ * Consider a scenario, where start state is [[:x 0] [:y 0]], and a * signifies the commit time:
+ * :write :x 1  |---*------------------------------------|
+ *              2   5                                    20
+ * :write :y 2       |--*-|
  *                   6  8 10
- * :read :y 2               |----|---|
+ * :read :y 2               |----*---|
  *                          11   13  15
- * :read :x 0  |                        |----|
+ * :read :x 0  *                        |----|
  *             1                        16   19
- * This sequence will allow the user to deduce that the write to x happens after the write to y,
- * but a stale read at 6 will produce [[:x 1] [:y 0]], which contradicts the deduction.
+ * A concurrent write to x and y seems to tell us that the write to x commits before y, but the
+ * actual effect did not happen until time = 20. After the write to y returns, a read to y does
+ * reflect this write. However, when the read to x is issued, since the write is still happening,
+ * the commit timestamp of this read is set to a time earlier than the commit timestamp of the
+ * write, which led the user to not observe the effect of the write. This read sequence will allow
+ * the user to deduce that the write to x happens after the write to y, but a stale read at 6
+ * will produce [[:x 1] [:y 0]], which contradicts the deduction.
  *
  * In the following comments, we are going to refer to a read whose commit timestamp is less than
  * its real start time as an "abnormal read".
  */
-public class ExternalVisibilityVerifier implements Verifier {
+public class ExternalConsistencyVerifier implements Verifier {
   private static final Keyword READ_KEYWORD = Keyword.newKeyword("read");
   private static final Keyword WRITE_KEYWORD = Keyword.newKeyword("write");
 
@@ -55,14 +59,7 @@ public class ExternalVisibilityVerifier implements Verifier {
 
   // Keeps track of changes to the database state, ranked by their commit timestamps. Only stores
   // delta instead of the whole state map
-  private TreeMap<Timestamp, Map<String, Long>> stateChanges = new TreeMap<>();
-
-  // Keeps track of all abnormal reads whose invoke records have been seen yet whose ok record
-  // has not. The key is a hash of the record to identify two records that belong to the same
-  // operation. Maintain this data structure because we cannot tell if a read is abnormal from
-  // its ok record, and we also do not know about the read result from its invoke record. Thus we
-  // need a way to connect the two records.
-  private Map<String, Record> hangingReadsToIgnore = new HashMap<>();
+  private TreeMap<Timestamp, Map<String, Long>> changeHistory = new TreeMap<>();
 
   @Override
   public boolean verify(Map<String, Long> initialState, String... filePath) {
@@ -76,6 +73,13 @@ public class ExternalVisibilityVerifier implements Verifier {
 
   @VisibleForTesting
   boolean verify(Readable input, Map<String, Long> initialState) {
+    // Keeps track of all abnormal reads whose invoke records have been seen yet whose ok record
+    // has not. The key is a hash of the record to identify two records that belong to the same
+    // operation. Maintain this data structure because we cannot tell if a read is abnormal from
+    // its ok record, and we also do not know about the read result from its invoke record. Thus we
+    // need a way to connect the two records.
+    Map<String, Record> hangingReadsToIgnore = new HashMap<>();
+
     List<Record> records = Verifier.parseRecords(input);
     records.sort(Comparator.comparing(this::getTimestampAccordingToLoad));
 
@@ -157,21 +161,26 @@ public class ExternalVisibilityVerifier implements Verifier {
       boolean valid = false;
       // Find all state changes between the commit timestamp of the last read and that of this read
       Map<Timestamp, Map<String, Long>> statesToInspect =
-              stateChanges.subMap(startInspectTimestamp, /*inclusive=*/false,
+              changeHistory.subMap(startInspectTimestamp, /*inclusive=*/false,
                       read.getCommitTimestamp(), /*inclusive=*/true);
       Map<String, Long> stateObserved = new HashMap<>(getReadResults(read));
       // We want the current abnormal record's read result to overwrite the earlier read
       stateObserved.putAll(getReadResults(record));
-      for (Map<String, Long> singleChange : statesToInspect.values()) {
-        for (String key : singleChange.keySet()) {
-          if (latestState.containsKey(key)) {
-            latestState.put(key, singleChange.get(key));
+      if (foundObservedState(stateObserved, latestState)) {
+        // need to check the latest state first
+        valid = true;
+      } else {
+        // otherwise look for the observed state in change history
+        for (Map<String, Long> singleChange : statesToInspect.values()) {
+          for (String key : singleChange.keySet()) {
+            if (latestState.containsKey(key)) {
+              latestState.put(key, singleChange.get(key));
+            }
           }
-        }
-        if (stateObserved.keySet().stream()
-                .allMatch(key -> latestState.get(key).equals(stateObserved.get(key)))) {
-          // The stateObserved, according to the two reads, have existed at a point
-          valid = true;
+          if (foundObservedState(stateObserved, latestState)) {
+            valid = true;
+            break;
+          }
         }
       }
       if (!valid) {
@@ -183,6 +192,16 @@ public class ExternalVisibilityVerifier implements Verifier {
       startInspectTimestamp = read.getCommitTimestamp();
     }
     return true;
+  }
+
+  /**
+   * Given the observed state and the latest database state, returns if the observed state is
+   * found in the latest state.
+   */
+  private boolean foundObservedState(Map<String, Long> stateObserved,
+                                     Map<String, Long> latestState) {
+    return stateObserved.keySet().stream()
+            .allMatch(key -> latestState.get(key).equals(stateObserved.get(key)));
   }
 
   /**
@@ -198,7 +217,7 @@ public class ExternalVisibilityVerifier implements Verifier {
         stateChange.put(key, value);
       }
     }
-    stateChanges.put(record.getCommitTimestamp(), stateChange);
+    changeHistory.put(record.getCommitTimestamp(), stateChange);
   }
 
   /**
@@ -208,7 +227,7 @@ public class ExternalVisibilityVerifier implements Verifier {
   private Map<String, Long> getLastChangedValues(Collection<String> keys, Timestamp upToTimestamp,
                                                  Map<String, Long> initialState) {
     NavigableMap<Timestamp, Map<String, Long>> stateChangesToInspect =
-            stateChanges.headMap(upToTimestamp, /*inclusive=*/true);
+            changeHistory.headMap(upToTimestamp, /*inclusive=*/true);
     HashMap<String, Long> latestState = new HashMap<>();
     for (Map<String, Long> stateChange : stateChangesToInspect.descendingMap().values()) {
       for (Iterator<String> it = keys.iterator(); it.hasNext();) {
