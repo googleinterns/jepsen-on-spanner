@@ -9,3 +9,5 @@ lib
 jobs
 WORKSPACE
 BUILD
+generate_keys.py
+init.csv
