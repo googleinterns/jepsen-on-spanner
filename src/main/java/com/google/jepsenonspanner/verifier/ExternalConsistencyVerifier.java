@@ -212,6 +212,9 @@ public class ExternalConsistencyVerifier implements Verifier {
                                      Map<String, Long> normalReadObservedState,
                                      Map<String, Long> latestState) {
     Map<String, Long> stateObserved = new HashMap<>(normalReadObservedState);
+    // Do this so we overwrite the contents of the normal read
+    // e.g. normal read = :x 0, :y 1, abnormal read = :x 2, :z 2
+    // stateObserved = :x 2, :y 1, :z 2
     stateObserved.putAll(abnormalReadObservedState);
     return stateObserved.keySet().stream()
             .allMatch(key -> latestState.get(key).equals(stateObserved.get(key)));
