@@ -129,18 +129,18 @@ public class ExternalConsistencyVerifier implements Verifier {
    * timestamp of two reads i.e. if this state can be observed by any changes in between. If not,
    * return false i.e. invalid.
    * @param record the ok record that corresponds to the abnormal read
-   * @param currentStartTimestamp the start timestamp of the abnoraml read
+   * @param abnormalStartTimestamp the start timestamp of the abnoraml read
    * @param initialState initial state of the database
    */
-  private boolean checkAbnormalRead(Record record, Timestamp currentStartTimestamp, Map<String,
+  private boolean checkAbnormalRead(Record record, Timestamp abnormalStartTimestamp, Map<String,
           Long> initialState) {
-    Timestamp currentCommitTimestamp = record.getCommitTimestamp();
+    Timestamp abnormalCommitTimestamp = record.getCommitTimestamp();
 
     Set<String> keysInThisRead = getRecordKeys(record);
     // Find all the reads that happened between the current commit timestamp and the current real
     // start time; these are the reads we want to check against the current abnoraml read
-    SortedMap<Timestamp, Record> subMapToInspect = finishedReads.subMap(currentCommitTimestamp,
-            currentStartTimestamp);
+    SortedMap<Timestamp, Record> subMapToInspect = finishedReads.subMap(abnormalCommitTimestamp,
+            abnormalStartTimestamp);
     Timestamp maxCommitTimestamp = subMapToInspect.lastKey();
     Collection<Record> readsToInspect = subMapToInspect.values();
     // Find the set of keys that are involved in all the reads that we need to inspect, and
@@ -151,13 +151,13 @@ public class ExternalConsistencyVerifier implements Verifier {
                     (set, singleRecord) -> set.addAll(getRecordKeys(singleRecord)),
                     AbstractCollection::addAll);
     allKeys.addAll(keysInThisRead);
-    Map<String, Long> latestState = getLastChangedValues(allKeys, currentCommitTimestamp,
+    Map<String, Long> latestState = getLastChangedValues(allKeys, abnormalCommitTimestamp,
             initialState);
 
     // Track the read results of all normal reads
     List<Map<String, Long>> statesObserved = new ArrayList<>();
     for (Record read : readsToInspect) {
-      if (read.getRealTimestamp().compareTo(currentStartTimestamp) > 0) {
+      if (read.getRealTimestamp().compareTo(abnormalStartTimestamp) > 0) {
         // read is not strictly before the current abnormal read, so skip
         continue;
       }
@@ -168,7 +168,7 @@ public class ExternalConsistencyVerifier implements Verifier {
     // Find all state changes between the commit timestamp of the abnormal read and the max
     // commit timestamp of normal reads
     Map<Timestamp, Map<String, Long>> statesToInspect =
-            changeHistory.subMap(currentCommitTimestamp, /*inclusive=*/false,
+            changeHistory.subMap(abnormalCommitTimestamp, /*inclusive=*/false,
                     maxCommitTimestamp, /*inclusive=*/true);
     if (!findState(statesObserved, abnormalReadStateObserved, latestState)) {
       for (Map<String, Long> singleChange : statesToInspect.values()) {
