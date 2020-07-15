@@ -3,19 +3,14 @@ import com.beust.jcommander.JCommander;
 import com.beust.jcommander.Parameter;
 import com.beust.jcommander.ParameterException;
 import com.google.jepsenonspanner.client.Executor;
-import com.google.jepsenonspanner.loadgenerator.BankLoadGenerator;
-import com.google.jepsenonspanner.loadgenerator.LinearizabilityLoadGenerator;
 import com.google.jepsenonspanner.loadgenerator.LoadGenerator;
 import com.google.jepsenonspanner.operation.Operation;
-import com.google.jepsenonspanner.verifier.BankVerifier;
-import com.google.jepsenonspanner.verifier.KnossosVerifier;
 import com.google.jepsenonspanner.verifier.Verifier;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.HashMap;
-import java.util.Map;
 import java.util.stream.Stream;
 
 import static com.google.jepsenonspanner.constants.BenchmarkTypes.BANK_TYPE;
@@ -25,6 +20,7 @@ import static com.google.jepsenonspanner.constants.BenchmarkTypes.INVALID_TYPE_M
 public class JepsenOnSpanner {
   private static final String PARSING_ERROR = "Error parsing history file";
   private static final String HISTORY_PATH = "history.edn";
+  private static final String HISTORY_REAL_TIME_PATH = "history-real-time.edn";
   private static final String INIT = "INIT";
   private static final String WORKER = "WORKER";
   private static final String VERIFIER = "VERIFIER";
@@ -165,11 +161,12 @@ public class JepsenOnSpanner {
    */
   private void verifyHistory(Executor executor) {
     executor.extractHistory();
+    executor.extractHistoryWithTimestamp();
     Verifier v = Verifier.createVerifier(benchmarkType);
     if (initValuePath != null) {
-      v.verify(HISTORY_PATH, retrieveInitialState(initValuePath));
+      v.verify(retrieveInitialState(initValuePath), HISTORY_PATH, HISTORY_REAL_TIME_PATH);
     } else {
-      v.verify(HISTORY_PATH, new HashMap<>());
+      v.verify(new HashMap<>(), HISTORY_PATH, HISTORY_REAL_TIME_PATH);
     }
   }
 

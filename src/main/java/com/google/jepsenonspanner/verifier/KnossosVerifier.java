@@ -17,10 +17,10 @@ public class KnossosVerifier implements Verifier {
   private static final String KNOSSOS_CLI = "knossos.cli";
 
   @Override
-  public boolean verify(String filePath, Map<String, Long> initialState) {
+  public boolean verify(Map<String, Long> initialState, String... filePath) {
     require.invoke(Clojure.read(KNOSSOS_CLI));
     IFn readHistory = Clojure.var(KNOSSOS_CLI, "read-history");
-    PersistentVector history = (PersistentVector) readHistory.invoke(filePath);
+    PersistentVector history = (PersistentVector) readHistory.invoke(filePath[0]);
     return verify(history, initialState);
   }
 

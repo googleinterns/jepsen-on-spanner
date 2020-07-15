@@ -76,11 +76,11 @@ def run():
         stdout=subprocess.PIPE).stdout.decode("utf-8")
     print(output)
 
-    if "Valid!" in output:
-        clean_up()
-    else:
+    if "Invalid operation found" in output:
         global fail
         fail = True
+    else:
+        clean_up()
 
 
 def clean_up():

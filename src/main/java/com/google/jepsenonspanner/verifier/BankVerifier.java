@@ -4,15 +4,10 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.jepsenonspanner.client.Record;
 import com.google.jepsenonspanner.loadgenerator.BankLoadGenerator;
 import us.bpsm.edn.Keyword;
-import us.bpsm.edn.parser.Parseable;
-import us.bpsm.edn.parser.Parser;
-import us.bpsm.edn.parser.Parsers;
 
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedList;
@@ -46,24 +41,19 @@ public class BankVerifier implements Verifier {
   private HashMap<String, LinkedList<HashMap<String, Long>>> concurrentTxnStates = new HashMap<>();
 
   @Override
-  public boolean verify(String filePath, Map<String, Long> state) {
+  public boolean verify(Map<String, Long> state, String... filePath) {
     try {
-      FileReader fs = new FileReader(new File(filePath));
+      FileReader fs = new FileReader(new File(filePath[0]));
       return verify(fs, state);
     } catch (FileNotFoundException e) {
-      throw new RuntimeException("Invalid file");
+      throw new RuntimeException(INVALID_FILE);
     }
   }
 
   @VisibleForTesting
   boolean verify(Readable input, Map<String, Long> initialState) {
     HashMap<String, Long> state = new HashMap<>(initialState);
-    Parseable pbr = Parsers.newParseable(input);
-    Parser parser = Parsers.newParser(Parsers.defaultConfiguration());
-
-    // parses the edn file to Java data structure
-    List<Map<Keyword, Object>> recordMaps = (List<Map<Keyword, Object>>) parser.nextValue(pbr);
-    List<Record> records = recordMaps.stream().map(Record::createRecordFromMap).collect(Collectors.toList());
+    List<Record> records = Verifier.parseRecords(input);
 
     try {
       for (Record record : records) {
@@ -98,7 +88,7 @@ public class BankVerifier implements Verifier {
   private String recordUniqueId(Record record) {
     long processId = record.getpID();
     Keyword opName = record.getLoad();
-    List<List<Object>> value = record.getRepresentation();
+    List<List<Object>> value = record.getRawRepresentation();
     if (opName.equals(READ)) {
       // convert the read representation to only include keys
       value =
@@ -113,7 +103,7 @@ public class BankVerifier implements Verifier {
    */
   private void checkOk(Record record) throws VerifierException {
     Keyword opName = record.getLoad();
-    List<List<Object>> value = record.getRepresentation();
+    List<List<Object>> value = record.getRawRepresentation();
     String currRecordId = recordUniqueId(record);
     if (opName.equals(READ)) {
       checkOkRead(value, recordUniqueId(record));
@@ -201,7 +191,7 @@ public class BankVerifier implements Verifier {
    */
   private void checkFail(Record record) throws VerifierException {
     Keyword opName = record.getLoad();
-    List<List<Object>> value = record.getRepresentation();
+    List<List<Object>> value = record.getRawRepresentation();
     if (opName.equals(TRANSFER)) {
       checkFailTransfer(value, recordUniqueId(record));
     } else {

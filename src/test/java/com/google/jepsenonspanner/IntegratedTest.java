@@ -1,7 +1,5 @@
 package com.google.jepsenonspanner;
 
-import com.google.cloud.spanner.KeySet;
-import com.google.cloud.spanner.Mutation;
 import com.google.jepsenonspanner.client.Executor;
 import com.google.jepsenonspanner.loadgenerator.BankLoadGenerator;
 import com.google.jepsenonspanner.loadgenerator.LinearizabilityLoadGenerator;
@@ -14,7 +12,6 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -40,7 +37,7 @@ public class IntegratedTest {
     }
     executor.extractHistory();
     Verifier v = new BankVerifier();
-    v.verify("history.edn", initialValues);
+    v.verify(initialValues, "history.edn");
   }
 
   @Test
@@ -55,7 +52,7 @@ public class IntegratedTest {
     }
     executor.extractHistory();
     Verifier v = new KnossosVerifier();
-    v.verify("history.edn", initialValues);
+    v.verify(initialValues, "history.edn");
   }
 
   @AfterEach
