@@ -11,6 +11,7 @@ import us.bpsm.edn.protocols.Protocol;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 import static com.google.jepsenonspanner.client.Executor.OP_NAME_COLUMN_NAME;
@@ -220,5 +221,24 @@ public class Record {
             ", commitTimestamp=" + commitTimestamp +
             ", realTimestamp=" + realTimestamp +
             '}';
+  }
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) return true;
+    if (o == null || getClass() != o.getClass()) return false;
+    Record record = (Record) o;
+    return getpID() == record.getpID() &&
+            getType().equals(record.getType()) &&
+            getLoad().equals(record.getLoad()) &&
+            representation.equals(record.representation) &&
+            getCommitTimestamp().equals(record.getCommitTimestamp()) &&
+            getRealTimestamp().equals(record.getRealTimestamp());
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(getType(), getLoad(), representation, getpID(), getCommitTimestamp(),
+            getRealTimestamp());
   }
 }
