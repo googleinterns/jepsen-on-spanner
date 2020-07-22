@@ -1,5 +1,9 @@
 package com.google.jepsenonspanner.verifier;
 
+import com.google.jepsenonspanner.verifier.knossos.LinearVerifier;
+
+import java.time.Duration;
+import java.time.Instant;
 import java.util.Map;
 
 /**
@@ -11,7 +15,20 @@ public class LinearizabilityVerifier implements Verifier {
     if (filePath.length != 2) {
       throw new RuntimeException("Linearizability Verifier only accepts 2 files");
     }
-    return new KnossosVerifier().verify(initialState, filePath[0]) && new ExternalConsistencyVerifier().verify(
-            initialState, filePath[1]);
+
+    return timedVerify(new KnossosVerifier(), /*filePathIdx=*/0, initialState, filePath) &&
+            timedVerify(new ExternalConsistencyVerifier(), /*filePathIdx=*/1, initialState,
+                    filePath) &&
+            timedVerify(new LinearVerifier(), /*filePathIdx=*/0, initialState, filePath);
+  }
+
+  private boolean timedVerify(Verifier verifier, int filePathIdx, Map<String, Long> initialState, String... filePath) {
+    Instant start = Instant.now();
+    boolean pass = verifier.verify(initialState, filePath[filePathIdx]);
+    Instant end = Instant.now();
+    Duration duration = Duration.between(start, end);
+    System.out.printf("%s took %d minutes and %d seconds", verifier.getClass().getTypeName(),
+            duration.toMinutesPart(), duration.toSecondsPart());
+    return pass;
   }
 }

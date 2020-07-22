@@ -3,13 +3,11 @@ package com.google.jepsenonspanner.verifier.knossos;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.jepsenonspanner.client.Record;
 import com.google.jepsenonspanner.verifier.Verifier;
-import com.google.jepsenonspanner.verifier.VerifierException;
 
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
@@ -35,30 +33,30 @@ public class LinearVerifier implements Verifier {
   @VisibleForTesting
   boolean verify(Readable input, Map<String, Long> initialState) {
     List<Record> records = Verifier.parseRecords(input);
-    Stack<Config> dfs = new Stack<>();
-    Config initialConf = new Config(initialState);
+    Stack<Node> dfs = new Stack<>();
+    Node initialConf = new Node(initialState);
     dfs.push(initialConf);
 
     while (!dfs.empty()) {
-      Config top = dfs.pop();
-      List<Config> nextConfs = top.transition(records);
+      Node top = dfs.pop();
+      List<Node> nextConfs = top.transition(records);
       dfs.addAll(nextConfs);
     }
-    int maxRecordIdxSeen = Config.getMaxRecordIdxSeen();
+    int maxRecordIdxSeen = Node.getMaxRecordIdxSeen();
     if (maxRecordIdxSeen < records.size()) {
       // Did not reach the end of the history, so it is invalid
       System.out.println(INVALID_INFO + records.get(maxRecordIdxSeen));
-      HashSet<Config> seenRecords = Config.getConfigsSeen();
-      List<Config> seenRecordsList = new ArrayList<>(seenRecords);
-      seenRecordsList.sort(Comparator.comparingInt(Config::getRecordIdx));
-      for (Config conf : seenRecordsList) {
+      HashSet<Node> seenRecords = Node.getConfigsVisited();
+      List<Node> seenRecordsList = new ArrayList<>(seenRecords);
+      seenRecordsList.sort(Comparator.comparingInt(Node::getRecordIdx));
+      for (Node conf : seenRecordsList) {
         System.out.println(conf);
       }
-      Config.reset();
+      Node.reset();
       return false;
     }
     System.out.println(VALID_INFO);
-    Config.reset();
+    Node.reset();
     return true;
   }
 }

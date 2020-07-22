@@ -3,11 +3,9 @@ package com.google.jepsenonspanner.verifier.knossos;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.jepsenonspanner.client.Record;
 import com.google.jepsenonspanner.operation.OpRepresentation;
-import com.google.jepsenonspanner.verifier.VerifierException;
 import us.bpsm.edn.Keyword;
 
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -22,24 +20,25 @@ import static com.google.jepsenonspanner.client.Record.OK_STR;
 
 /**
  * This class encapsulates a node in the Linearizability DFS graph. Contains the state of the
- * database, the records that are in progress and the ones that have been linearized.
+ * database, the records that are in progress and the ones that have been linearized. It
+ * is essentially the state of the current search. Corresponds to a config in the paper.
  */
-public class Config {
+public class Node {
   private Map<String, Long> databaseState;
   // Since each thread can have at most one record in both call and ret set, index them using pID
   private HashMap<Long, Record> calls;
   private HashMap<Long, Record> rets;
-  // keeps track of the next position in the history to transition to
+  // Keeps track of the next position in the history to transition to
   private int recordIdx;
 
-  // Memorize configs seen so that we do not go through an invalid path twice
-  private static HashSet<Config> configsSeen = new HashSet<>();
+  // Memorize configs visited so far so that we do not go through an invalid path twice
+  private static HashSet<Node> configsVisited = new HashSet<>();
   // Records the maximum record index we have seen; if we reached the end of the history, this
-  // should equal to length of the history
+  // should be equal to length of the history
   private static int maxRecordIdxSeen = -1;
 
-  private Config(Map<String, Long> databaseState,
-                HashMap<Long, Record> calls, HashMap<Long, Record> rets, int recordIdx) {
+  private Node(Map<String, Long> databaseState,
+               HashMap<Long, Record> calls, HashMap<Long, Record> rets, int recordIdx) {
     this.databaseState = new HashMap<>(databaseState);
     this.calls = new HashMap<>(calls);
     this.rets = new HashMap<>(rets);
@@ -52,22 +51,22 @@ public class Config {
   /**
    * Constructor for the initial config.
    */
-  public Config(Map<String, Long> initialState) {
+  public Node(Map<String, Long> initialState) {
     this(initialState, new HashMap<>(), new HashMap<>(), /*recordIdx=*/0);
   }
 
   /**
    * Copy constructor that advances the record index to the next position in history.
    */
-  private Config(Config other) {
+  private Node(Node other) {
     this(other.databaseState, other.calls, other.rets, other.recordIdx + 1);
   }
 
   /**
-   * Transitions this Config into the next possible Config(s). Reads the next position of record
+   * Transitions this Node into the next possible Node(s). Reads the next position of record
    * and call, return or linearize that record based on if it exists in the call or ret sets.
    */
-  public List<Config> transition(List<Record> history) {
+  public List<Node> transition(List<Record> history) {
     if (recordIdx >= history.size()) {
       return Collections.emptyList();
     }
@@ -84,10 +83,10 @@ public class Config {
   /**
    * Add the record to the call set. Do this when the record is an invoke record.
    */
-  public List<Config> call(Record record) {
-    Config conf = new Config(this);
+  public List<Node> call(Record record) {
+    Node conf = new Node(this);
     conf.calls.put(record.getpID(), record);
-    configsSeen.add(conf);
+    configsVisited.add(conf);
     System.out.println("Calling " + conf);
     return Collections.singletonList(conf);
   }
@@ -99,12 +98,12 @@ public class Config {
    * Return all valid linearization orders, or return an empty list if no valid linearization can
    * be achieved.
    */
-  public List<Config> linearize(Record record) {
+  public List<Node> linearize(Record record) {
     Set<Long> pIDSet = new HashSet<>(calls.keySet());
     pIDSet.add(record.getpID());
     long[] recordPIDs = pIDSet.stream().mapToLong(Number::longValue).toArray();
 
-    List<Config> toSearch = new ArrayList<>();
+    List<Node> toSearch = new ArrayList<>();
     backtrackHelper(recordPIDs, 0, new HashMap<>(), record, toSearch);
     System.out.println("Linearizing " + toSearch);
     return toSearch;
@@ -119,15 +118,15 @@ public class Config {
    * @param record the return record that we try to linearize
    */
   private void backtrackHelper(long[] pIDs, int idx, Map<String, Long> changeHistory,
-                               Record record, List<Config> toSearch) {
+                               Record record, List<Node> toSearch) {
     if (idx >= pIDs.length) {
-      Config newConf = new Config(this);
+      Node newConf = new Node(this);
       newConf.calls.remove(record.getpID());
       newConf.rets.putAll(calls);
       newConf.calls.clear();
       newConf.databaseState.putAll(changeHistory);
-      if (!configsSeen.contains(newConf)) {
-        configsSeen.add(newConf);
+      if (!configsVisited.contains(newConf)) {
+        configsVisited.add(newConf);
         toSearch.add(newConf);
       }
     }
@@ -215,10 +214,10 @@ public class Config {
   /**
    * Remove the return record from the rets set. Do this when this record is already linearized.
    */
-  public List<Config> ret(Record record) {
-    Config conf = new Config(this);
+  public List<Node> ret(Record record) {
+    Node conf = new Node(this);
     conf.rets.remove(record.getpID());
-    configsSeen.add(conf);
+    configsVisited.add(conf);
     System.out.println("Reting " + conf);
     return Collections.singletonList(conf);
   }
@@ -232,18 +231,18 @@ public class Config {
    */
   public static void reset() {
     maxRecordIdxSeen = -1;
-    configsSeen.clear();
+    configsVisited.clear();
   }
 
   @Override
   public boolean equals(Object o) {
     if (this == o) return true;
     if (o == null || getClass() != o.getClass()) return false;
-    Config config = (Config) o;
+    Node node = (Node) o;
 
-    return databaseState.equals(config.databaseState) &&
-            calls.equals(config.calls) &&
-            rets.equals(config.rets);
+    return databaseState.equals(node.databaseState) &&
+            calls.equals(node.calls) &&
+            rets.equals(node.rets);
   }
 
   @Override
@@ -253,7 +252,7 @@ public class Config {
 
   @Override
   public String toString() {
-    return "Config{" +
+    return "Node{" +
             "databaseState=" + databaseState +
             ",\n\t calls=" + calls.values().stream().map(record -> record.getpID() + " " + record.getRawRepresentation()).collect(Collectors.toList()) +
             ",\n\t rets=" + rets.values().stream().map(record -> record.getpID() + " " + record.getRawRepresentation()).collect(Collectors.toList()) +
@@ -262,8 +261,8 @@ public class Config {
   }
 
   @VisibleForTesting
-  public static HashSet<Config> getConfigsSeen() {
-    return configsSeen;
+  public static HashSet<Node> getConfigsVisited() {
+    return configsVisited;
   }
 
   @VisibleForTesting
