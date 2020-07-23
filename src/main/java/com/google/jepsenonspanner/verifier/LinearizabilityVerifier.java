@@ -27,8 +27,8 @@ public class LinearizabilityVerifier implements Verifier {
     boolean pass = verifier.verify(initialState, filePath[filePathIdx]);
     Instant end = Instant.now();
     Duration duration = Duration.between(start, end);
-    System.out.printf("%s took %d minutes and %d seconds", verifier.getClass().getTypeName(),
-            duration.toMinutesPart(), duration.toSecondsPart());
+    System.out.printf("%s took %d milliseconds\n", verifier.getClass().getTypeName(),
+            duration.toMillis());
     return pass;
   }
 }

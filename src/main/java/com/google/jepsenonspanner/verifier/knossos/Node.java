@@ -87,7 +87,6 @@ public class Node {
     Node conf = new Node(this);
     conf.calls.put(record.getpID(), record);
     configsVisited.add(conf);
-    System.out.println("Calling " + conf);
     return Collections.singletonList(conf);
   }
 
@@ -105,7 +104,6 @@ public class Node {
 
     List<Node> toSearch = new ArrayList<>();
     backtrackHelper(recordPIDs, 0, new HashMap<>(), record, toSearch);
-    System.out.println("Linearizing " + toSearch);
     return toSearch;
   }
 
@@ -122,7 +120,7 @@ public class Node {
     if (idx >= pIDs.length) {
       Node newConf = new Node(this);
       newConf.calls.remove(record.getpID());
-      newConf.rets.putAll(calls);
+      newConf.rets.putAll(newConf.calls);
       newConf.calls.clear();
       newConf.databaseState.putAll(changeHistory);
       if (!configsVisited.contains(newConf)) {
@@ -218,7 +216,6 @@ public class Node {
     Node conf = new Node(this);
     conf.rets.remove(record.getpID());
     configsVisited.add(conf);
-    System.out.println("Reting " + conf);
     return Collections.singletonList(conf);
   }
 
@@ -242,12 +239,13 @@ public class Node {
 
     return databaseState.equals(node.databaseState) &&
             calls.equals(node.calls) &&
-            rets.equals(node.rets);
+            rets.equals(node.rets) &&
+            recordIdx == node.recordIdx;
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(databaseState, calls, rets);
+    return Objects.hash(databaseState, calls, rets, recordIdx);
   }
 
   @Override

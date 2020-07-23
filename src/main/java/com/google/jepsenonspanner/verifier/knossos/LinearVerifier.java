@@ -32,6 +32,7 @@ public class LinearVerifier implements Verifier {
    */
   @VisibleForTesting
   boolean verify(Readable input, Map<String, Long> initialState) {
+    Node.reset();
     List<Record> records = Verifier.parseRecords(input);
     Stack<Node> dfs = new Stack<>();
     Node initialConf = new Node(initialState);
@@ -45,13 +46,7 @@ public class LinearVerifier implements Verifier {
     int maxRecordIdxSeen = Node.getMaxRecordIdxSeen();
     if (maxRecordIdxSeen < records.size()) {
       // Did not reach the end of the history, so it is invalid
-      System.out.println(INVALID_INFO + records.get(maxRecordIdxSeen));
-      HashSet<Node> seenRecords = Node.getConfigsVisited();
-      List<Node> seenRecordsList = new ArrayList<>(seenRecords);
-      seenRecordsList.sort(Comparator.comparingInt(Node::getRecordIdx));
-      for (Node conf : seenRecordsList) {
-        System.out.println(conf);
-      }
+      System.out.println(INVALID_INFO + "index = " + maxRecordIdxSeen + " " + records.get(maxRecordIdxSeen));
       Node.reset();
       return false;
     }

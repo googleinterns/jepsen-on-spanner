@@ -117,4 +117,9 @@ class LinearVerifierTest {
             "-register" +
             "/good/multi-register.edn"));
   }
+
+  @Test
+  void testSimpleGenerated() {
+    assertTrue(verifier.verify(initialState, "history-test-linear.edn"));
+  }
 }

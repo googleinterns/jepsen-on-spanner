@@ -9,7 +9,7 @@ FROM adoptopenjdk:11-jre-hotspot
 
 # Copy local code to the container image.
 COPY ./build/libs/Jepsen-on-spanner-1.0-SNAPSHOT-all.jar /app/Jepsen-on-spanner.jar
-COPY ./test-node.json /app/test-node.json
+COPY ./test-config.json /app/test-config.json
 WORKDIR /app
 #COPY build.gradle gradlew /app/
 #COPY gradle /app/gradle
