@@ -32,7 +32,7 @@ public class Node {
   private int recordIdx;
 
   // Memorize configs visited so far so that we do not go through an invalid path twice
-  private static HashSet<Node> configsVisited = new HashSet<>();
+  private static HashSet<Node> nodesVisited = new HashSet<>();
   // Records the maximum record index we have seen; if we reached the end of the history, this
   // should be equal to length of the history
   private static int maxRecordIdxSeen = -1;
@@ -49,7 +49,7 @@ public class Node {
   }
 
   /**
-   * Constructor for the initial config.
+   * Constructor for the initial node.
    */
   public Node(Map<String, Long> initialState) {
     this(initialState, new HashMap<>(), new HashMap<>(), /*recordIdx=*/0);
@@ -84,10 +84,10 @@ public class Node {
    * Add the record to the call set. Do this when the record is an invoke record.
    */
   public List<Node> call(Record record) {
-    Node conf = new Node(this);
-    conf.calls.put(record.getpID(), record);
-    configsVisited.add(conf);
-    return Collections.singletonList(conf);
+    Node node = new Node(this);
+    node.calls.put(record.getpID(), record);
+    nodesVisited.add(node);
+    return Collections.singletonList(node);
   }
 
   /**
@@ -123,8 +123,8 @@ public class Node {
       newConf.rets.putAll(newConf.calls);
       newConf.calls.clear();
       newConf.databaseState.putAll(changeHistory);
-      if (!configsVisited.contains(newConf)) {
-        configsVisited.add(newConf);
+      if (!nodesVisited.contains(newConf)) {
+        nodesVisited.add(newConf);
         toSearch.add(newConf);
       }
     }
@@ -213,10 +213,10 @@ public class Node {
    * Remove the return record from the rets set. Do this when this record is already linearized.
    */
   public List<Node> ret(Record record) {
-    Node conf = new Node(this);
-    conf.rets.remove(record.getpID());
-    configsVisited.add(conf);
-    return Collections.singletonList(conf);
+    Node node = new Node(this);
+    node.rets.remove(record.getpID());
+    nodesVisited.add(node);
+    return Collections.singletonList(node);
   }
 
   public static int getMaxRecordIdxSeen() {
@@ -228,7 +228,7 @@ public class Node {
    */
   public static void reset() {
     maxRecordIdxSeen = -1;
-    configsVisited.clear();
+    nodesVisited.clear();
   }
 
   @Override
@@ -259,8 +259,8 @@ public class Node {
   }
 
   @VisibleForTesting
-  public static HashSet<Node> getConfigsVisited() {
-    return configsVisited;
+  public static HashSet<Node> getNodesVisited() {
+    return nodesVisited;
   }
 
   @VisibleForTesting

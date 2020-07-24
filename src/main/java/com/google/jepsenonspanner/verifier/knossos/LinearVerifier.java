@@ -14,6 +14,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Stack;
 
+/**
+ * A verifier that implements the optimized version of the Wing-Gong Linearizability algorithm.
+ * Knossos uses the same optimization.
+ */
 public class LinearVerifier implements Verifier {
   @Override
   public boolean verify(Map<String, Long> initialState, String... filePath) {
@@ -35,13 +39,13 @@ public class LinearVerifier implements Verifier {
     Node.reset();
     List<Record> records = Verifier.parseRecords(input);
     Stack<Node> dfs = new Stack<>();
-    Node initialConf = new Node(initialState);
-    dfs.push(initialConf);
+    Node initialNode = new Node(initialState);
+    dfs.push(initialNode);
 
     while (!dfs.empty()) {
       Node top = dfs.pop();
-      List<Node> nextConfs = top.transition(records);
-      dfs.addAll(nextConfs);
+      List<Node> nextNodes = top.transition(records);
+      dfs.addAll(nextNodes);
     }
     int maxRecordIdxSeen = Node.getMaxRecordIdxSeen();
     if (maxRecordIdxSeen < records.size()) {
