@@ -61,10 +61,10 @@ def run():
         lines = output.split("\n")
         for line in lines[1:]:
             fields = line.split()
+            print(fields)
             if len(fields) == 0:
                 continue
-            print(fields)
-            if fields[2] != "Completed":
+            if fields[2] == "Running" or fields[2] == "ContainerCreating":
                 in_progress = True
                 time.sleep(2)
                 break
@@ -72,7 +72,8 @@ def run():
     output = subprocess.run(
         ["java", "-jar", "./build/libs/Jepsen-on-spanner-1.0-SNAPSHOT-all.jar", "--project",
          "jepsen-on-spanner-with-gke", "--instance", "jepsen", "--database", "test", "--component",
-         "VERIFIER", "--pID", "0", "--initial-values", "init.csv", "--benchmark-type", benchmark],
+         "VERIFIER", "--pID", "0", "--initial-values", "init.csv", "--benchmark-type",
+         benchmark],
         stdout=subprocess.PIPE).stdout.decode("utf-8")
     print(output)
 
