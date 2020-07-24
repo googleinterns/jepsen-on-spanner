@@ -31,7 +31,7 @@ public class Node {
   // Keeps track of the next position in the history to transition to
   private int recordIdx;
 
-  // Memorize configs visited so far so that we do not go through an invalid path twice
+  // Memorize nodes visited so far so that we do not go through an invalid path twice
   private static HashSet<Node> nodesVisited = new HashSet<>();
   // Records the maximum record index we have seen; if we reached the end of the history, this
   // should be equal to length of the history
@@ -109,7 +109,7 @@ public class Node {
 
   /**
    * Permutates the processIDs, applying them in different orders on the database state while
-   * checking if any invalid state is reached. Only adds the new config when all changes are
+   * checking if any invalid state is reached. Only adds the new node when all changes are
    * applied and the state is still valid.
    * @param changeHistory stores all the keys changed and apply them in the end, so no overhead
    *                      for keys that are not changed
@@ -118,14 +118,14 @@ public class Node {
   private void backtrackHelper(long[] pIDs, int idx, Map<String, Long> changeHistory,
                                Record record, List<Node> toSearch) {
     if (idx >= pIDs.length) {
-      Node newConf = new Node(this);
-      newConf.calls.remove(record.getpID());
-      newConf.rets.putAll(newConf.calls);
-      newConf.calls.clear();
-      newConf.databaseState.putAll(changeHistory);
-      if (!nodesVisited.contains(newConf)) {
-        nodesVisited.add(newConf);
-        toSearch.add(newConf);
+      Node newNode = new Node(this);
+      newNode.calls.remove(record.getpID());
+      newNode.rets.putAll(newNode.calls);
+      newNode.calls.clear();
+      newNode.databaseState.putAll(changeHistory);
+      if (!nodesVisited.contains(newNode)) {
+        nodesVisited.add(newNode);
+        toSearch.add(newNode);
       }
     }
     for (int i = idx; i < pIDs.length; i++) {
