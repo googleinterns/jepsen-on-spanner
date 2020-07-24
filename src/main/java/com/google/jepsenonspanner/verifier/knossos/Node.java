@@ -252,8 +252,10 @@ public class Node {
   public String toString() {
     return "Node{" +
             "databaseState=" + databaseState +
-            ",\n\t calls=" + calls.values().stream().map(record -> record.getpID() + " " + record.getRawRepresentation()).collect(Collectors.toList()) +
-            ",\n\t rets=" + rets.values().stream().map(record -> record.getpID() + " " + record.getRawRepresentation()).collect(Collectors.toList()) +
+            ",\n\t calls=" + calls.values().stream().map(record -> record.getpID() +
+            " " + record.getRawRepresentation()).collect(Collectors.toList()) +
+            ",\n\t rets=" + rets.values().stream().map(record -> record.getpID() +
+            " " + record.getRawRepresentation()).collect(Collectors.toList()) +
             ",\n recordIdx=" + recordIdx +
             '}';
   }
