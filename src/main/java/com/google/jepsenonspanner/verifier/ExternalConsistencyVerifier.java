@@ -10,6 +10,7 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.util.AbstractCollection;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -19,6 +20,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.NavigableMap;
 import java.util.Set;
+import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.stream.Collectors;
 
@@ -127,18 +129,19 @@ public class ExternalConsistencyVerifier implements Verifier {
    * timestamp of two reads i.e. if this state can be observed by any changes in between. If not,
    * return false i.e. invalid.
    * @param record the ok record that corresponds to the abnormal read
-   * @param currentStartTimestamp the start timestamp of the abnoraml read
+   * @param abnormalStartTimestamp the start timestamp of the abnoraml read
    * @param initialState initial state of the database
    */
-  private boolean checkAbnormalRead(Record record, Timestamp currentStartTimestamp, Map<String,
+  private boolean checkAbnormalRead(Record record, Timestamp abnormalStartTimestamp, Map<String,
           Long> initialState) {
-    Timestamp currentCommitTimestamp = record.getCommitTimestamp();
+    Timestamp abnormalCommitTimestamp = record.getCommitTimestamp();
 
     Set<String> keysInThisRead = getRecordKeys(record);
     // Find all the reads that happened between the current commit timestamp and the current real
     // start time; these are the reads we want to check against the current abnoraml read
-    Map<Timestamp, Record> subMapToInspect = finishedReads.subMap(currentCommitTimestamp,
-            currentStartTimestamp);
+    SortedMap<Timestamp, Record> subMapToInspect = finishedReads.subMap(abnormalCommitTimestamp,
+            abnormalStartTimestamp);
+    Timestamp maxCommitTimestamp = subMapToInspect.lastKey();
     Collection<Record> readsToInspect = subMapToInspect.values();
     // Find the set of keys that are involved in all the reads that we need to inspect, and
     // extract a latest state that contains all these keys. This aims to save space so that we do
@@ -148,58 +151,71 @@ public class ExternalConsistencyVerifier implements Verifier {
                     (set, singleRecord) -> set.addAll(getRecordKeys(singleRecord)),
                     AbstractCollection::addAll);
     allKeys.addAll(keysInThisRead);
-    Map<String, Long> latestState = getLastChangedValues(allKeys, currentCommitTimestamp,
+    Map<String, Long> latestState = getLastChangedValues(allKeys, abnormalCommitTimestamp,
             initialState);
-    // This variable will be updated later so that each time we are moving the changes we are
-    // inspecting to the commit timestamp of the next read.
-    Timestamp startInspectTimestamp = currentCommitTimestamp;
+
+    // Track the read results of all normal reads
+    List<Map<String, Long>> statesObserved = new ArrayList<>();
     for (Record read : readsToInspect) {
-      if (read.getRealTimestamp().compareTo(currentStartTimestamp) > 0) {
+      if (read.getRealTimestamp().compareTo(abnormalStartTimestamp) > 0) {
         // read is not strictly before the current abnormal read, so skip
         continue;
       }
-      boolean valid = false;
-      // Find all state changes between the commit timestamp of the last read and that of this read
-      Map<Timestamp, Map<String, Long>> statesToInspect =
-              changeHistory.subMap(startInspectTimestamp, /*inclusive=*/false,
-                      read.getCommitTimestamp(), /*inclusive=*/true);
-      Map<String, Long> stateObserved = new HashMap<>(getReadResults(read));
-      // We want the current abnormal record's read result to overwrite the earlier read
-      stateObserved.putAll(getReadResults(record));
-      if (foundObservedState(stateObserved, latestState)) {
-        // need to check the latest state first
-        valid = true;
-      } else {
-        // otherwise look for the observed state in change history
-        for (Map<String, Long> singleChange : statesToInspect.values()) {
-          for (String key : singleChange.keySet()) {
-            if (latestState.containsKey(key)) {
-              latestState.put(key, singleChange.get(key));
-            }
-          }
-          if (foundObservedState(stateObserved, latestState)) {
-            valid = true;
-            break;
+      statesObserved.add(getReadResults(read));
+    }
+    Map<String, Long> abnormalReadStateObserved = getReadResults(record);
+
+    // Find all state changes between the commit timestamp of the abnormal read and the max
+    // commit timestamp of normal reads
+    Map<Timestamp, Map<String, Long>> statesToInspect =
+            changeHistory.subMap(abnormalCommitTimestamp, /*inclusive=*/false,
+                    maxCommitTimestamp, /*inclusive=*/true);
+    if (!findState(statesObserved, abnormalReadStateObserved, latestState)) {
+      for (Map<String, Long> singleChange : statesToInspect.values()) {
+        for (String key : singleChange.keySet()) {
+          if (latestState.containsKey(key)) {
+            latestState.put(key, singleChange.get(key));
           }
         }
+        if (findState(statesObserved, abnormalReadStateObserved, latestState)) {
+          break;
+        }
       }
-      if (!valid) {
-        System.out.println(INVALID_INFO + "\n\t" + record + "\n\t" + read);
-        System.out.println("State observed: " + stateObserved);
-        System.out.println("State changes: " + statesToInspect.values());
-        return false;
-      }
-      startInspectTimestamp = read.getCommitTimestamp();
     }
+    if (!statesObserved.isEmpty()) {
+      System.out.println(INVALID_INFO + "\n\t" + record);
+      System.out.println("State observed: " + statesObserved + abnormalReadStateObserved);
+      System.out.println("State changes: " + statesToInspect.values());
+      return false;
+    }
+
     return true;
+  }
+
+  /**
+   * If any of the state comprised of one normal read and one abnormal read is found in the
+   * latest state, remove the state of the normal read from the list. If the list is empty,
+   * return true, which means that all states have been verified, and this abnormal read is valid.
+   */
+  private boolean findState(List<Map<String, Long>> normalReadStates,
+                         Map<String, Long> abnormalReadState, Map<String, Long> latestState) {
+    normalReadStates.removeIf(
+            normalReadState -> foundObservedState(normalReadState, abnormalReadState, latestState));
+    return normalReadStates.isEmpty();
   }
 
   /**
    * Given the observed state and the latest database state, returns if the observed state is
    * found in the latest state.
    */
-  private boolean foundObservedState(Map<String, Long> stateObserved,
+  private boolean foundObservedState(Map<String, Long> abnormalReadObservedState,
+                                     Map<String, Long> normalReadObservedState,
                                      Map<String, Long> latestState) {
+    Map<String, Long> stateObserved = new HashMap<>(normalReadObservedState);
+    // Do this so we overwrite the contents of the normal read
+    // e.g. normal read = :x 0, :y 1, abnormal read = :x 2, :z 2
+    // stateObserved = :x 2, :y 1, :z 2
+    stateObserved.putAll(abnormalReadObservedState);
     return stateObserved.keySet().stream()
             .allMatch(key -> latestState.get(key).equals(stateObserved.get(key)));
   }

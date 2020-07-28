@@ -31,8 +31,8 @@ public class Node {
   // Keeps track of the next position in the history to transition to
   private int recordIdx;
 
-  // Memorize configs visited so far so that we do not go through an invalid path twice
-  private static HashSet<Node> configsVisited = new HashSet<>();
+  // Memorize nodes visited so far so that we do not go through an invalid path twice
+  private static HashSet<Node> nodesVisited = new HashSet<>();
   // Records the maximum record index we have seen; if we reached the end of the history, this
   // should be equal to length of the history
   private static int maxRecordIdxSeen = -1;
@@ -49,7 +49,7 @@ public class Node {
   }
 
   /**
-   * Constructor for the initial config.
+   * Constructor for the initial node.
    */
   public Node(Map<String, Long> initialState) {
     this(initialState, new HashMap<>(), new HashMap<>(), /*recordIdx=*/0);
@@ -84,10 +84,10 @@ public class Node {
    * Add the record to the call set. Do this when the record is an invoke record.
    */
   public List<Node> call(Record record) {
-    Node conf = new Node(this);
-    conf.calls.put(record.getpID(), record);
-    configsVisited.add(conf);
-    return Collections.singletonList(conf);
+    Node node = new Node(this);
+    node.calls.put(record.getpID(), record);
+    nodesVisited.add(node);
+    return Collections.singletonList(node);
   }
 
   /**
@@ -109,7 +109,7 @@ public class Node {
 
   /**
    * Permutates the processIDs, applying them in different orders on the database state while
-   * checking if any invalid state is reached. Only adds the new config when all changes are
+   * checking if any invalid state is reached. Only adds the new node when all changes are
    * applied and the state is still valid.
    * @param changeHistory stores all the keys changed and apply them in the end, so no overhead
    *                      for keys that are not changed
@@ -118,14 +118,14 @@ public class Node {
   private void backtrackHelper(long[] pIDs, int idx, Map<String, Long> changeHistory,
                                Record record, List<Node> toSearch) {
     if (idx >= pIDs.length) {
-      Node newConf = new Node(this);
-      newConf.calls.remove(record.getpID());
-      newConf.rets.putAll(newConf.calls);
-      newConf.calls.clear();
-      newConf.databaseState.putAll(changeHistory);
-      if (!configsVisited.contains(newConf)) {
-        configsVisited.add(newConf);
-        toSearch.add(newConf);
+      Node newNode = new Node(this);
+      newNode.calls.remove(record.getpID());
+      newNode.rets.putAll(newNode.calls);
+      newNode.calls.clear();
+      newNode.databaseState.putAll(changeHistory);
+      if (!nodesVisited.contains(newNode)) {
+        nodesVisited.add(newNode);
+        toSearch.add(newNode);
       }
     }
     for (int i = idx; i < pIDs.length; i++) {
@@ -213,10 +213,10 @@ public class Node {
    * Remove the return record from the rets set. Do this when this record is already linearized.
    */
   public List<Node> ret(Record record) {
-    Node conf = new Node(this);
-    conf.rets.remove(record.getpID());
-    configsVisited.add(conf);
-    return Collections.singletonList(conf);
+    Node node = new Node(this);
+    node.rets.remove(record.getpID());
+    nodesVisited.add(node);
+    return Collections.singletonList(node);
   }
 
   public static int getMaxRecordIdxSeen() {
@@ -228,7 +228,7 @@ public class Node {
    */
   public static void reset() {
     maxRecordIdxSeen = -1;
-    configsVisited.clear();
+    nodesVisited.clear();
   }
 
   @Override
@@ -252,15 +252,17 @@ public class Node {
   public String toString() {
     return "Node{" +
             "databaseState=" + databaseState +
-            ",\n\t calls=" + calls.values().stream().map(record -> record.getpID() + " " + record.getRawRepresentation()).collect(Collectors.toList()) +
-            ",\n\t rets=" + rets.values().stream().map(record -> record.getpID() + " " + record.getRawRepresentation()).collect(Collectors.toList()) +
+            ",\n\t calls=" + calls.values().stream().map(record -> record.getpID() +
+            " " + record.getRawRepresentation()).collect(Collectors.toList()) +
+            ",\n\t rets=" + rets.values().stream().map(record -> record.getpID() +
+            " " + record.getRawRepresentation()).collect(Collectors.toList()) +
             ",\n recordIdx=" + recordIdx +
             '}';
   }
 
   @VisibleForTesting
-  public static HashSet<Node> getConfigsVisited() {
-    return configsVisited;
+  public static HashSet<Node> getNodesVisited() {
+    return nodesVisited;
   }
 
   @VisibleForTesting

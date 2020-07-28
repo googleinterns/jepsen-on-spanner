@@ -7,7 +7,7 @@ import java.time.Instant;
 import java.util.Map;
 
 /**
- * A wrapper class to run both Knossos and External Visibility Verifier
+ * A wrapper class to run Knossos, External Visibility Verifier and WGL Verifier
  */
 public class LinearizabilityVerifier implements Verifier {
   @Override
