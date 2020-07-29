@@ -123,6 +123,22 @@ class KnossosVerifierTest {
   }
 
   @Test
+  void verifyNegative2() {
+    KnossosVerifier v = new KnossosVerifier();
+    String input = "[" +
+            "{:type :invoke, :f :txn, :value [[:read :x nil] [:write :y 2]], :process 0, " +
+            ":commitTimestamp 0, :realTimestamp 0}" +
+            "{:type :invoke, :f :txn, :value [[:write :x 3] [:read :y nil]], :process 2, " +
+            ":commitTimestamp 0, :realTimestamp 0}" +
+            "{:type :ok, :f :txn, :value [[:read :x 0] [:write :y 2]], :process 0," +
+            ":commitTimestamp 3, :realTimestamp 3}" +
+            "{:type :ok, :f :txn, :value [[:write :x 3] [:read :y 0]], :process 2," +
+            ":commitTimestamp 3, :realTimestamp 3}" +
+            "]";
+    assertFalse(v.verifyByString(input, test));
+  }
+
+  @Test
   void testSimpleGenerated() {
     Verifier v = new KnossosVerifier();
     HashMap<String, Long> initKVs = new HashMap<>();
@@ -136,5 +152,12 @@ class KnossosVerifierTest {
       throw new RuntimeException("PARSING_ERROR");
     }
     assertTrue(v.verify(initKVs, "history.edn"));
+  }
+
+  @Test
+  void testOriginal() {
+    Verifier v = new KnossosVerifier();
+    assertTrue(v.verify(test, "/usr/local/google/home/hanchiz/knossos/data/multi" +
+            "-register/good/multi-register.edn"));
   }
 }

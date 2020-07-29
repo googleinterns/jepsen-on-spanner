@@ -88,7 +88,7 @@ class LinearVerifierTest {
 
   @Test
   void testValidInterleave3() {
-    assertTrue(verifier.verify(new StringReader(
+    assertFalse(verifier.verify(new StringReader(
             "[" +
                     "{:type :invoke, :f :txn, :value [[:read :x nil] [:write :y 2]], :process 0, " +
                     ":commitTimestamp 0, :realTimestamp 0}" +
@@ -160,10 +160,89 @@ class LinearVerifierTest {
   }
 
   @Test
-  void testKnossosExample() {
-    assertTrue(verifier.verify(initialState, "/usr/local/google/home/hanchiz/knossos/data/multi" +
-            "-register" +
-            "/good/multi-register.edn"));
+  void testInvalidUnrelatedKeys() {
+    assertFalse(verifier.verify(new StringReader(
+            "[\n" +
+                    "    {\n" +
+                    "        :type :invoke,\n" +
+                    "        :f :txn,\n" +
+                    "        :value [[:write :x 1]],\n" +
+                    "        :process 3\n" +
+                    "    }\n" +
+                    "    {\n" +
+                    "        :type :invoke,\n" +
+                    "        :f :txn,\n" +
+                    "        :value [[:read :x nil]],\n" +
+                    "        :process 2\n" +
+                    "    }\n" +
+                    "    {\n" +
+                    "        :type :ok,\n" +
+                    "        :f :txn,\n" +
+                    "        :value [[:read :x 1]],\n" +
+                    "        :process 2\n" +
+                    "    }\n" +
+                    "    {\n" +
+                    "        :type :invoke,\n" +
+                    "        :f :txn,\n" +
+                    "        :value [[:read :x nil]],\n" +
+                    "        :process 1\n" +
+                    "    }\n" +
+                    "    {\n" +
+                    "        :type :ok,\n" +
+                    "        :f :txn,\n" +
+                    "        :value [[:read :x 0]],\n" +
+                    "        :process 1\n" +
+                    "    }\n" +
+                    "    {\n" +
+                    "        :type :ok,\n" +
+                    "        :f :txn,\n" +
+                    "        :value [[:write :x 1]],\n" +
+                    "        :process 3\n" +
+                    "    }\n" +
+                    "]"), initialState));
+  }
+
+  @Test
+  void testValidSameKey() {
+    assertTrue(verifier.verify(new StringReader(
+            "[\n" +
+                    "    {\n" +
+                    "        :type :invoke,\n" +
+                    "        :f :txn,\n" +
+                    "        :value [[:write :x 1]],\n" +
+                    "        :process 3\n" +
+                    "    }\n" +
+                    "    {\n" +
+                    "        :type :invoke,\n" +
+                    "        :f :txn,\n" +
+                    "        :value [[:read :x nil]],\n" +
+                    "        :process 2\n" +
+                    "    }\n" +
+                    "    {\n" +
+                    "        :type :ok,\n" +
+                    "        :f :txn,\n" +
+                    "        :value [[:read :x 0]],\n" +
+                    "        :process 2\n" +
+                    "    }\n" +
+                    "    {\n" +
+                    "        :type :invoke,\n" +
+                    "        :f :txn,\n" +
+                    "        :value [[:read :x nil]],\n" +
+                    "        :process 1\n" +
+                    "    }\n" +
+                    "    {\n" +
+                    "        :type :ok,\n" +
+                    "        :f :txn,\n" +
+                    "        :value [[:read :x 1]],\n" +
+                    "        :process 1\n" +
+                    "    }\n" +
+                    "    {\n" +
+                    "        :type :ok,\n" +
+                    "        :f :txn,\n" +
+                    "        :value [[:write :x 1]],\n" +
+                    "        :process 3\n" +
+                    "    }\n" +
+                    "]"), initialState));
   }
 
   @Test
