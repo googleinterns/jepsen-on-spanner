@@ -7,12 +7,19 @@ consistency under special scenarios. This project intended to apply Jepsen on
 Cloud Spanner databases.
 
 ##Installation
-Make sure you have Java 11 and Python 3 installed.
+Make sure you have Java 11, Python 3 and `kubectl` installed.
 
 Download this repo.
 
 `git clone https://github.com/googleinterns/jepsen-on-spanner.git`
 
+You need to set up a kubernetes cluster and port the settings to `kuberctl` as well. Using Google
+Kubernetes Engine, execute:
+ 
+```
+gcloud container clusters create [cluster-name]
+gcloud container clusters get-credentials [cluster-name]
+```
 
 ##Usage
 

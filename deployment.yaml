@@ -12,7 +12,7 @@ spec:
         - name: worker
           image: gcr.io/jepsen-on-spanner-with-gke/jepsen-on-spanner
           command: ["java"]
-          args: ["-jar","Jepsen-on-spanner.jar","--project","jepsen-on-spanner-with-gke",
-                 "--instance","jepsen","--database","test","--component","WORKER","--pID","$PID",
-                 "--config-file","test-config.json","--benchmark-type","$BENCHMARK"]
+          args: ["-jar","Jepsen-on-spanner.jar","--project","$PROJECT",
+                 "--instance","$INSTANCE","--database","$DATABASE","--component","WORKER","--pID",
+                 "$PID", "--config-file","test-config.json","--benchmark-type","$BENCHMARK"]
       restartPolicy: Never

@@ -9,5 +9,4 @@ lib
 .gcloudignore
 *.json
 jobs
-WORKSPACE
 init.csv
