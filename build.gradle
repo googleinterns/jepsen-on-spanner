@@ -1,0 +1,53 @@
+plugins {
+    id 'application'
+    id 'com.github.johnrengelman.shadow' version '5.2.0'
+    id 'io.zcx.plugin.bazel' version '0.0.3'
+}
+
+version '1.0-SNAPSHOT'
+
+sourceCompatibility = 1.11
+
+repositories {
+    mavenCentral()
+    maven { url "http://clojars.org/repo" }
+}
+
+dependencies {
+    // testCompile group: 'junit', name: 'junit', version: '4.12'
+    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.3.1'
+    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.3.1'
+    implementation 'com.google.cloud:google-cloud-spanner:1.55.1'
+    implementation 'us.bpsm:edn-java:0.7.1'
+    implementation 'com.google.code.gson:gson:2.8.6'
+    implementation "com.beust:jcommander:1.78"
+    // https://mvnrepository.com/artifact/knossos/knossos
+    implementation "knossos:knossos:0.3.5"
+    implementation "org.clojure:clojure:1.10.1"
+}
+
+test {
+    environment "SPANNER_EMULATOR_HOST", "localhost:9010"
+    println System.getenv("SPANNER_EMULATOR_HOST")
+    useJUnitPlatform()
+}
+
+mainClassName = 'JepsenOnSpanner'
+
+task uberJar(type: Jar) {
+    archiveClassifier = 'uber'
+
+    from sourceSets.main.output
+
+    manifest {
+        attributes(
+//                'Class-Path': configurations.compile.collect { it.getName() }.join(' '),
+                'Main-Class': 'JepsenOnSpanner'
+        )
+    }
+
+    dependsOn configurations.runtimeClasspath
+    from {
+        configurations.runtimeClasspath.findAll { it.name.endsWith('jar') }.collect { zipTree(it) }
+    }
+}
