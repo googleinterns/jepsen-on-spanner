@@ -71,6 +71,7 @@ public class Node {
       return Collections.emptyList();
     }
     Record record = history.get(recordIdx);
+    System.out.println("Because of " + record);
     if (record.getType().equals(INVOKE_STR)) {
       return call(record);
     } else if (rets.containsKey(record.getpID())) {
@@ -87,6 +88,7 @@ public class Node {
     Node node = new Node(this);
     node.calls.put(record.getpID(), record);
     nodesVisited.add(node);
+    System.out.println("Call " + node);
     return Collections.singletonList(node);
   }
 
@@ -104,6 +106,7 @@ public class Node {
 
     List<Node> toSearch = new ArrayList<>();
     backtrackHelper(recordPIDs, 0, new HashMap<>(), record, toSearch);
+    System.out.println("Lin " + toSearch);
     return toSearch;
   }
 
@@ -142,6 +145,7 @@ public class Node {
         Map<String, Long> currentState = new HashMap<>(databaseState);
         currentState.putAll(changeHistory);
         if (!isConsistent(readsToLinearize, currentState)) {
+          System.out.println("Inconsistent \n" + readsToLinearize + "\n" + currentState);
           // Not consistent, so we backtrack
           swapPIDs(pIDs, i, idx);
           continue;
@@ -216,6 +220,7 @@ public class Node {
     Node node = new Node(this);
     node.rets.remove(record.getpID());
     nodesVisited.add(node);
+    System.out.println("Ret " + node);
     return Collections.singletonList(node);
   }
 
@@ -253,9 +258,9 @@ public class Node {
     return "Node{" +
             "databaseState=" + databaseState +
             ",\n\t calls=" + calls.values().stream().map(record -> record.getpID() +
-            " " + record.getRawRepresentation()).collect(Collectors.toList()) +
+            " " + record.getRawRepresentation() + "\n").collect(Collectors.toList()) +
             ",\n\t rets=" + rets.values().stream().map(record -> record.getpID() +
-            " " + record.getRawRepresentation()).collect(Collectors.toList()) +
+            " " + record.getRawRepresentation() + "\n").collect(Collectors.toList()) +
             ",\n recordIdx=" + recordIdx +
             '}';
   }
