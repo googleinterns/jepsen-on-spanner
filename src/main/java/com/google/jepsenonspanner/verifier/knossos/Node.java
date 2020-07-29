@@ -71,7 +71,6 @@ public class Node {
       return Collections.emptyList();
     }
     Record record = history.get(recordIdx);
-    System.out.println("Because of " + record);
     if (record.getType().equals(INVOKE_STR)) {
       return call(record);
     } else if (rets.containsKey(record.getpID())) {
@@ -140,7 +139,7 @@ public class Node {
   }
 
   /**
-   * Apply the returned record to the node and add the new node into the list of nodes to search
+   * Applies the returned record to the node and adds the new node into the list of nodes to search
    * for.
    */
   private void applyReturnRecord(Record returnRecord, Map<String, Long> changeHistory,
