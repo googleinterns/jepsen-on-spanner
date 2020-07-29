@@ -3,8 +3,13 @@ package com.google.jepsenonspanner.verifier.knossos;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
 import java.io.StringReader;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.util.HashMap;
 import java.util.Map;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -83,7 +88,7 @@ class LinearVerifierTest {
 
   @Test
   void testValidInterleave3() {
-    assertTrue(verifier.verify(new StringReader(
+    assertFalse(verifier.verify(new StringReader(
             "[" +
                     "{:type :invoke, :f :txn, :value [[:read :x nil] [:write :y 2]], :process 0, " +
                     ":commitTimestamp 0, :realTimestamp 0}" +
@@ -112,14 +117,146 @@ class LinearVerifierTest {
   }
 
   @Test
-  void testKnossosExample() {
-    assertTrue(verifier.verify(initialState, "/usr/local/google/home/hanchiz/knossos/data/multi" +
-            "-register" +
-            "/good/multi-register.edn"));
+  void testValidUnrelatedKeys() {
+    assertTrue(verifier.verify(new StringReader(
+            "[\n" +
+                    "    {\n" +
+                    "        :type :invoke,\n" +
+                    "        :f :txn,\n" +
+                    "        :value [[:write :x 1]],\n" +
+                    "        :process 3\n" +
+                    "    }\n" +
+                    "    {\n" +
+                    "        :type :invoke,\n" +
+                    "        :f :txn,\n" +
+                    "        :value [[:read :y nil]],\n" +
+                    "        :process 2\n" +
+                    "    }\n" +
+                    "    {\n" +
+                    "        :type :ok,\n" +
+                    "        :f :txn,\n" +
+                    "        :value [[:read :y 0]],\n" +
+                    "        :process 2\n" +
+                    "    }\n" +
+                    "    {\n" +
+                    "        :type :invoke,\n" +
+                    "        :f :txn,\n" +
+                    "        :value [[:read :x nil]],\n" +
+                    "        :process 1\n" +
+                    "    }\n" +
+                    "    {\n" +
+                    "        :type :ok,\n" +
+                    "        :f :txn,\n" +
+                    "        :value [[:read :x 0]],\n" +
+                    "        :process 1\n" +
+                    "    }\n" +
+                    "    {\n" +
+                    "        :type :ok,\n" +
+                    "        :f :txn,\n" +
+                    "        :value [[:write :x 1]],\n" +
+                    "        :process 3\n" +
+                    "    }\n" +
+                    "]"), initialState));
+  }
+
+  @Test
+  void testInvalidUnrelatedKeys() {
+    assertFalse(verifier.verify(new StringReader(
+            "[\n" +
+                    "    {\n" +
+                    "        :type :invoke,\n" +
+                    "        :f :txn,\n" +
+                    "        :value [[:write :x 1]],\n" +
+                    "        :process 3\n" +
+                    "    }\n" +
+                    "    {\n" +
+                    "        :type :invoke,\n" +
+                    "        :f :txn,\n" +
+                    "        :value [[:read :x nil]],\n" +
+                    "        :process 2\n" +
+                    "    }\n" +
+                    "    {\n" +
+                    "        :type :ok,\n" +
+                    "        :f :txn,\n" +
+                    "        :value [[:read :x 1]],\n" +
+                    "        :process 2\n" +
+                    "    }\n" +
+                    "    {\n" +
+                    "        :type :invoke,\n" +
+                    "        :f :txn,\n" +
+                    "        :value [[:read :x nil]],\n" +
+                    "        :process 1\n" +
+                    "    }\n" +
+                    "    {\n" +
+                    "        :type :ok,\n" +
+                    "        :f :txn,\n" +
+                    "        :value [[:read :x 0]],\n" +
+                    "        :process 1\n" +
+                    "    }\n" +
+                    "    {\n" +
+                    "        :type :ok,\n" +
+                    "        :f :txn,\n" +
+                    "        :value [[:write :x 1]],\n" +
+                    "        :process 3\n" +
+                    "    }\n" +
+                    "]"), initialState));
+  }
+
+  @Test
+  void testValidSameKey() {
+    assertTrue(verifier.verify(new StringReader(
+            "[\n" +
+                    "    {\n" +
+                    "        :type :invoke,\n" +
+                    "        :f :txn,\n" +
+                    "        :value [[:write :x 1]],\n" +
+                    "        :process 3\n" +
+                    "    }\n" +
+                    "    {\n" +
+                    "        :type :invoke,\n" +
+                    "        :f :txn,\n" +
+                    "        :value [[:read :x nil]],\n" +
+                    "        :process 2\n" +
+                    "    }\n" +
+                    "    {\n" +
+                    "        :type :ok,\n" +
+                    "        :f :txn,\n" +
+                    "        :value [[:read :x 0]],\n" +
+                    "        :process 2\n" +
+                    "    }\n" +
+                    "    {\n" +
+                    "        :type :invoke,\n" +
+                    "        :f :txn,\n" +
+                    "        :value [[:read :x nil]],\n" +
+                    "        :process 1\n" +
+                    "    }\n" +
+                    "    {\n" +
+                    "        :type :ok,\n" +
+                    "        :f :txn,\n" +
+                    "        :value [[:read :x 1]],\n" +
+                    "        :process 1\n" +
+                    "    }\n" +
+                    "    {\n" +
+                    "        :type :ok,\n" +
+                    "        :f :txn,\n" +
+                    "        :value [[:write :x 1]],\n" +
+                    "        :process 3\n" +
+                    "    }\n" +
+                    "]"), initialState));
   }
 
   @Test
   void testSimpleGenerated() {
-    assertTrue(verifier.verify(initialState, "history-test-linear.edn"));
+    HashMap<String, Long> initKVs = new HashMap<>();
+    try (Stream<String> stream = Files.lines(Paths.get("init.csv"))) {
+      stream.forEach(line -> {
+        String[] splitLine = line.split(",");
+        initKVs.put(splitLine[0], Long.parseLong(splitLine[1]));
+      });
+    } catch (IOException e) {
+      e.printStackTrace();
+      throw new RuntimeException("PARSING_ERROR");
+    }
+    assertTrue(verifier.verify(initKVs, "history.edn"));
   }
 }
