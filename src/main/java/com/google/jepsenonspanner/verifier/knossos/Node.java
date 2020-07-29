@@ -71,7 +71,6 @@ public class Node {
       return Collections.emptyList();
     }
     Record record = history.get(recordIdx);
-    System.out.println("Because of " + record);
     if (record.getType().equals(INVOKE_STR)) {
       return call(record);
     } else if (rets.containsKey(record.getpID())) {
@@ -88,7 +87,6 @@ public class Node {
     Node node = new Node(this);
     node.calls.put(record.getpID(), record);
     nodesVisited.add(node);
-    System.out.println("Call " + node);
     return Collections.singletonList(node);
   }
 
@@ -101,12 +99,14 @@ public class Node {
    */
   public List<Node> linearize(Record record) {
     Set<Long> pIDSet = new HashSet<>(calls.keySet());
-    pIDSet.add(record.getpID());
+    pIDSet.remove(record.getpID());
     long[] recordPIDs = pIDSet.stream().mapToLong(Number::longValue).toArray();
 
     List<Node> toSearch = new ArrayList<>();
+    // Apply the record first, before any pending record is linearized
+    applyReturnRecord(record, Collections.emptyMap(), recordPIDs, /*idx=*/-1, toSearch);
+
     backtrackHelper(recordPIDs, 0, new HashMap<>(), record, toSearch);
-    System.out.println("Lin " + toSearch);
     return toSearch;
   }
 
@@ -121,43 +121,47 @@ public class Node {
   private void backtrackHelper(long[] pIDs, int idx, Map<String, Long> changeHistory,
                                Record record, List<Node> toSearch) {
     if (idx >= pIDs.length) {
-      Node newNode = new Node(this);
-      newNode.calls.remove(record.getpID());
-      newNode.rets.putAll(newNode.calls);
-      newNode.calls.clear();
-      newNode.databaseState.putAll(changeHistory);
-      if (!nodesVisited.contains(newNode)) {
-        nodesVisited.add(newNode);
-        toSearch.add(newNode);
-      }
+      return;
     }
     for (int i = idx; i < pIDs.length; i++) {
       swapPIDs(pIDs, i, idx);
 
       Record recordToLinearize = calls.get(pIDs[idx]);
-      if (record.getpID() == pIDs[idx]) {
-        recordToLinearize = record;
-      }
-      if (recordToLinearize.getType().equals(OK_STR)) {
-        // This is a read result, so we need to check if it is consistent with the current
-        // database state
-        Map<String, Long> readsToLinearize = getReadResults(recordToLinearize);
-        Map<String, Long> currentState = new HashMap<>(databaseState);
-        currentState.putAll(changeHistory);
-        if (!isConsistent(readsToLinearize, currentState)) {
-          System.out.println("Inconsistent \n" + readsToLinearize + "\n" + currentState);
-          // Not consistent, so we backtrack
-          swapPIDs(pIDs, i, idx);
-          continue;
-        }
-      }
       Map<String, Long> resultToLinearize = getWriteResults(recordToLinearize);
       Map<String, Long> changeHistoryCopy = new HashMap<>(changeHistory);
       changeHistoryCopy.putAll(resultToLinearize);
+      applyReturnRecord(record, changeHistoryCopy, pIDs, idx, toSearch);
 
       backtrackHelper(pIDs, idx + 1, changeHistoryCopy, record, toSearch);
 
       swapPIDs(pIDs, i, idx);
+    }
+  }
+
+  /**
+   * Applies the returned record to the node and adds the new node into the list of nodes to search
+   * for.
+   */
+  private void applyReturnRecord(Record returnRecord, Map<String, Long> changeHistory,
+                                 long[] pIDs, int idx, List<Node> toSearch) {
+    Map<String, Long> readsToLinearize = getReadResults(returnRecord);
+    Map<String, Long> currentState = new HashMap<>(databaseState);
+    currentState.putAll(changeHistory);
+    if (isConsistent(readsToLinearize, currentState)) {
+      Map<String, Long> writesToUpdate = getWriteResults(returnRecord);
+      currentState.putAll(writesToUpdate);
+      Node newNode = new Node(this);
+      newNode.calls.remove(returnRecord.getpID());
+      // Move the pending operations that can be linearized into rets
+      for (int i = 0; i <= idx; i++) {
+        Record toMoveToRets = newNode.calls.remove(pIDs[i]);
+        newNode.rets.put(pIDs[i], toMoveToRets);
+      }
+      newNode.databaseState = currentState;
+      if (!nodesVisited.contains(newNode)) {
+        nodesVisited.add(newNode);
+        toSearch.add(newNode);
+      }
     }
   }
 
@@ -220,7 +224,6 @@ public class Node {
     Node node = new Node(this);
     node.rets.remove(record.getpID());
     nodesVisited.add(node);
-    System.out.println("Ret " + node);
     return Collections.singletonList(node);
   }
 
