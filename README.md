@@ -15,6 +15,7 @@ For the scope of this project, we have implemented two types of benchmarks: `ban
 - The `linearizability` benchmark treats the Spanner instance as a key-value store. It supports three types of operations: `read`, `write` or a `transaction` that contains a mixture of reads and writes. The verifier then checks for linearizability and external consistency models.
 
 ##Installation
+
 Make sure you have Java 11, Python 3 and `kubectl` installed.
 
 Download this repo.
@@ -33,7 +34,7 @@ gcloud container clusters get-credentials [cluster-name]
 
 `python main.py [OPTION]`
 
-####Options
+###Options
 
 `--project` specify the ID of the GCP project
 
@@ -51,7 +52,7 @@ gcloud container clusters get-credentials [cluster-name]
 
 `--job, -j` if specified, will run until invalid history found or error occurs
 
-####Example
+###Example
 
 To run a linearizability benchmark once on 8 workers:
 
@@ -93,5 +94,5 @@ The testing framework is consisted of three components: a Generator, an Executor
 - `test-config.json` contains configurations for running the tests, such as ratio between types of operations
 - `init.csv` contains the initial key value pairs
  
- ## Credit
- Inspired by [Jepsen](http://jepsen.io/) and [Knossos](https://github.com/googleinterns/jepsen-on-spanner).
+## Credit
+Inspired by [Jepsen](http://jepsen.io/) and [Knossos](https://github.com/googleinterns/jepsen-on-spanner).
