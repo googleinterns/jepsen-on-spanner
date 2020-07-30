@@ -14,8 +14,6 @@ For the scope of this project, we have implemented two types of benchmarks: `ban
 - The `bank` benchmark treats the Spanner instance as a series of accounts with balances. It supports two types of operations: a `read` across all accounts, and a `transfer` between two accounts. The benchmark then verifies if the balances read reflect all previous successful `transfer` operations. Also support stale `read` operations.
 - The `linearizability` benchmark treats the Spanner instance as a key-value store. It supports three types of operations: `read`, `write` or a `transaction` that contains a mixture of reads and writes. The verifier then checks for linearizability and external consistency models.
 
-The configuration of the ratio between each type of operations and operation number etc. can be found in `test-config.json`.
-
 ##Installation
 Make sure you have Java 11, Python 3 and `kubectl` installed.
 
@@ -92,7 +90,7 @@ The testing framework is consisted of three components: a Generator, an Executor
 - `main.py` contains the driver for the whole testing framework
 - `generate_keys.py` contains a helper program to generate multiple keys of large size; can be
  used for stress testing
-- `test-config.json` contains configurations for running the tests
+- `test-config.json` contains configurations for running the tests, such as ratio between types of operations
 - `init.csv` contains the initial key value pairs
  
  ## Credit
