@@ -6,6 +6,9 @@ import argparse
 
 parser = argparse.ArgumentParser(
     'Driver for Jepsen-on-Spanner testing framework.')
+parser.add_argument('--project', type=str, required=True, help='GCP project ID')
+parser.add_argument('--instance', type=str, required=True, help='Cloud Spanner instance name')
+parser.add_argument('--database', type=str, required=True, help='Cloud Spanner database name')
 parser.add_argument('--redeploy', '-r', action='store_true', help='if specified, will redeploy '
                                                                   'the program to Google Cloud '
                                                                   'build as a docker image')
@@ -22,6 +25,9 @@ redeploy = args.redeploy
 is_job = args.job
 delete = args.delete
 benchmark = args.benchmark
+projectId = args.project
+instanceId = args.instance
+databaseId = args.database
 fail = False
 
 
@@ -40,16 +46,17 @@ def run():
     # 1. create the testing and history tables
     # 2. insert the initial key value pairs in init.csv
     os.system(
-        "java -jar ./build/libs/Jepsen-on-spanner-1.0-SNAPSHOT-all.jar --project "
-        "jepsen-on-spanner-with-gke --instance jepsen --database test --component INIT --pID 0 "
-        "--initial-values init.csv")
+        "java -jar ./build/libs/Jepsen-on-spanner-1.0-SNAPSHOT-all.jar --project " +
+        projectId + " --instance " + instanceId + " --database " + databaseId + " --component " +
+        "INIT --pID 0 --initial-values init.csv")
 
     # Generate YAML deployment files from template and deploy to kubernetes
     os.system("mkdir ./jobs")
     for i in range(1, worker_num + 1):
         os.system(
-            f"cat deployment.yaml | sed \"s/\\$PID/{i}/\" | sed \"s/\\$BENCHMARK/{benchmark}/\" > "
-            f"./jobs/job-{i}.yaml")
+            f"cat deployment.yaml | sed \"s/\\$PID/{i}/\" | sed \"s/\\$BENCHMARK/{benchmark}/\" | "
+            f"sed \"s/\\$PROJECT/{projectId}/\" | sed \"s/\\$INSTANCE/{instanceId}/\" | sed "
+            f"\"s/\\$DATABASE/{databaseId}/\" > ./jobs/job-{i}.yaml")
     os.system("kubectl create -f ./jobs")
 
     # Poll for status of the pods and start verifier only when all workers finish
@@ -71,7 +78,7 @@ def run():
 
     output = subprocess.run(
         ["java", "-jar", "./build/libs/Jepsen-on-spanner-1.0-SNAPSHOT-all.jar", "--project",
-         "jepsen-on-spanner-with-gke", "--instance", "jepsen", "--database", "test", "--component",
+         projectId, "--instance", instanceId, "--database", databaseId, "--component",
          "VERIFIER", "--pID", "0", "--initial-values", "init.csv", "--benchmark-type",
          benchmark],
         stdout=subprocess.PIPE).stdout.decode("utf-8")
@@ -88,8 +95,8 @@ def clean_up():
     global worker_num
     for i in range(1, worker_num + 1):
         os.system(f"kubectl delete job test-worker-{i}")
-    process = subprocess.Popen(["gcloud", "spanner", "databases", "delete", "test",
-                                "--instance=jepsen"], stdin=subprocess.PIPE)
+    process = subprocess.Popen(["gcloud", "spanner", "databases", "delete", databaseId,
+                                "--instance=" + instanceId], stdin=subprocess.PIPE)
     process.communicate(input=b'Y')
     os.system("rm -r ./jobs")
 

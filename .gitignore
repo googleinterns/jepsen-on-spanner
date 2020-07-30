@@ -2,12 +2,11 @@
 !.gitignore
 build
 *gradle*
+!build.gradle
+!settings.gradle
 lib
 *.edn
 .gcloudignore
 *.json
 jobs
-WORKSPACE
-BUILD
-generate_keys.py
-init.csv
+!test-config.json
