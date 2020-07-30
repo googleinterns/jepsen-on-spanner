@@ -6,6 +6,16 @@ Jepsen is a correctness verifcation tools for distributed systems for their
 consistency under special scenarios. This project intended to apply Jepsen on
 Cloud Spanner databases.
 
+## Design Overview
+
+This framework focuses on testing the consistency models of the Spanner database. It does this by setting up multiple workers on a Google Kubernetes Engine cluster and running operations from them against a Spanner instance. Depending on different types of benchmarks the framework measures, the operation types can be different, but they can all be broken down into read / write actions to Spanner. Each operation also records two entries in a history. Once all operations are performed, the history is extracted and fed to a verifier to check against the consistency model of that benchmark.
+
+For the scope of this project, we have implemented two types of benchmarks: `bank` and `linearizability`.
+- The `bank` benchmark treats the Spanner instance as a series of accounts with balances. It supports two types of operations: a `read` across all accounts, and a `transfer` between two accounts. The benchmark then verifies if the balances read reflect all previous successful `transfer` operations. Also support stale `read` operations.
+- The `linearizability` benchmark treats the Spanner instance as a key-value store. It supports three types of operations: `read`, `write` or a `transaction` that contains a mixture of reads and writes. The verifier then checks for linearizability and external consistency models.
+
+The configuration of the ratio between each type of operations and operation number etc. can be found in `test-config.json`.
+
 ##Installation
 Make sure you have Java 11, Python 3 and `kubectl` installed.
 
@@ -58,16 +68,6 @@ To run a bank benchmark on 5 workers, redeploy the image on kubernetes, until fa
 To cleanup a previous job with 3 workers:
 
 `python main.py -w 3 -d --project [projectID] --instance [instanceID] --database [databaseID]`
-
-## Design Overview
-
-This framework focuses on testing the consistency models of the Spanner database. It does this by setting up multiple workers on a Google Kubernetes Engine cluster and running operations on them against a Spanner instance. Depending on different types of benchmarks the framework measures, the operation types can be different, but they can all be broken down into read / write actions to Spanner. Each operation also records two entries in a history. Once all operations are performed, the history is extracted and fed to a verifier to check against the consistency model of that benchmark.
-
-For the scope of this project, we have implemented two types of benchmarks: `bank` and `linearizability`.
-- The `bank` benchmark treats the Spanner instance as a series of accounts with balances. It supports two types of operations: a `read` across all accounts, and a `transfer` between two accounts. The benchmark then verifies if the balances read reflect all previous successful `transfer` operations. Also support stale `read` operations.
-- The `linearizability` benchmark treats the Spanner instance as a key-value store. It supports three types of operations: `read`, `write` or a `transaction` that contains a mixture of reads and writes. The verifier then checks for linearizability and external consistency models.
-
-The configuration of the ratio between each type of operations and operation number etc. can be found in `test-config.json`.
 
 ## Workflow
 
