@@ -9,4 +9,4 @@ lib
 .gcloudignore
 *.json
 jobs
-init.csv
+!test-config.json

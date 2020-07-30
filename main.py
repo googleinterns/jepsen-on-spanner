@@ -55,8 +55,8 @@ def run():
     for i in range(1, worker_num + 1):
         os.system(
             f"cat deployment.yaml | sed \"s/\\$PID/{i}/\" | sed \"s/\\$BENCHMARK/{benchmark}/\" | "
-            f"sed \"s/\\$PROJECT/{projectId} | sed \"s/\\$INSTANCE/{instanceId} | sed "
-            f"\"/\\$DATABASE/{databaseId} > ./jobs/job-{i}.yaml")
+            f"sed \"s/\\$PROJECT/{projectId}/\" | sed \"s/\\$INSTANCE/{instanceId}/\" | sed "
+            f"\"s/\\$DATABASE/{databaseId}/\" > ./jobs/job-{i}.yaml")
     os.system("kubectl create -f ./jobs")
 
     # Poll for status of the pods and start verifier only when all workers finish
